@@ -1,0 +1,2184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>偏振探究：高中物理三维虚拟实验与科普系统</title>
+    <!-- 引入 Tailwind CSS 构建现代学术感 UI -->
+    <script src="vendor/tailwind.js"></script>
+    <!-- 引入 Three.js -->
+    <script src="vendor/three.min.js"></script>
+    <!-- 引入 OrbitControls 用于 3D 视角拖拽旋转 -->
+    <script src="vendor/OrbitControls.js"></script>
+    <style>
+        html { scroll-behavior: smooth; }
+        body { overflow-y: auto; }
+        body { font-size: 16px; line-height: 1.55; }
+        main button, main select, main input:not([type="range"]), main label { font-size: 14px; }
+        #task-panel { font-size: 15px; line-height: 1.65; }
+        #task-panel label { font-size: 14px !important; }
+        #task-panel .prediction-option { min-height: 42px; font-size: 16px !important; font-weight: 600; }
+        button:disabled, select:disabled, input:disabled { cursor: not-allowed; opacity: .55; }
+        #task-panel .prediction-option:disabled { opacity: .85; }
+        #task-panel textarea { width: 100%; min-height: 100px; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; font-size: 14px; line-height: 1.6; }
+        #task-stage, #exploration-access, #application-prompt, #application-observation { font-size: 13px; line-height: 1.65; }
+        #task-panel #prediction-feedback, #task-panel #conclusion-feedback, #task-panel #application-feedback { font-size: 13px !important; }
+        #quick-demos-mech button, #quick-demos-light button { min-height: 44px; font-size: 14px; }
+        #mech-controls > div, #light-controls > div { font-size: 14px; }
+        #mech-controls label, #light-controls label { font-size: 14px; }
+        #mech-controls span.text-\[10px\], #light-controls span.text-\[10px\] { font-size: 12px !important; }
+        #knowledge-text, #model-assumption-tag, #curve-summary { font-size: 13px !important; line-height: 1.6; }
+        #three-container > div { font-size: 12px !important; line-height: 1.5; }
+        #measurement-count, #last-measurement { font-size: 13px !important; }
+        #ai-chat-messages { font-size: 14px; line-height: 1.65; }
+        #ai-chat-messages button { font-size: 13px; }
+        #ai-chat-input, #btn-ai-send, #btn-ai-analyze { font-size: 14px; min-height: 40px; }
+        header .text-\[10px\] { font-size: 12px !important; }
+        .example-tab { min-height: 40px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; color: #475569; font-size: 14px; font-weight: 600; transition: .15s; }
+        .example-tab:hover { background: #eff6ff; border-color: #93c5fd; color: #0369a1; }
+        .example-tab.active { background: #e0f2fe; border-color: #38bdf8; color: #0369a1; box-shadow: 0 0 0 2px rgba(56,189,248,.15); }
+        .rotation-gallery { display: none; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; max-width: 420px; margin: 0 auto; }
+        .rotation-gallery.visible { display: grid; }
+        #example-image[hidden] { display: none; }
+        .rotation-gallery img { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; }
+        body[data-experiment-mode="mechanical"] #simulation-column { align-self: start; }
+        body[data-experiment-mode="mechanical"] #simulation-viewport { flex: 0 0 auto; height: clamp(360px, 48vh, 420px); min-height: 0; }
+        body[data-experiment-mode="mechanical"] #metrics-panel { max-width: calc(100% - 32px); max-height: calc(100% - 72px); }
+        #metrics-panel { position: absolute; width: 270px; min-width: 210px; min-height: 180px; resize: both; overflow: auto; pointer-events: auto; }
+        #metrics-panel .metrics-drag-handle { cursor: move; user-select: none; touch-action: none; }
+        #metrics-panel .metrics-reset { opacity: 0; transition: opacity .15s; }
+        #metrics-panel:hover .metrics-reset, #metrics-panel:focus-within .metrics-reset { opacity: 1; }
+        /* 自定义精致的滑块轨道 */
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #0ea5e9;
+            cursor: pointer;
+            border: 2px solid #ffffff;
+            box-shadow: 0 2px 6px rgba(14, 165, 233, 0.4);
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            background: #e2e8f0;
+            border-radius: 9999px;
+            height: 6px;
+        }
+        /* 页面和面板滚动条保持可见，100% 缩放时可以继续查看下方内容 */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 5px;
+            border: 2px solid #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body data-experiment-mode="light" class="bg-slate-50 text-slate-800 min-h-screen flex flex-col overflow-x-hidden font-sans">
+
+    <!-- 顶部导航栏 -->
+    <header class="bg-white/90 backdrop-blur-md border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4 shrink-0 shadow-sm z-20">
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-sky-500/10 rounded-lg border border-sky-500/20">
+                <!-- 偏振镜片 Icon (SVG) -->
+                <svg class="w-6 h-6 text-sky-600 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold tracking-wider text-slate-900">
+                    偏振探究：高中物理三维虚拟实验与科普系统
+                </h1>
+                <p class="text-xs text-slate-500 mt-0.5">面向高中物理学习者 · 先预测、再操作、后解释的虚拟实验</p>
+            </div>
+        </div>
+        <!-- 核心物理概念标签 -->
+        <div class="flex gap-2 text-xs">
+            <span class="px-2.5 py-1 rounded bg-sky-50 text-sky-600 border border-sky-200 font-medium">光具有偏振现象</span>
+            <span class="px-2.5 py-1 rounded bg-indigo-50 text-indigo-600 border border-indigo-200 font-medium">横波特征探究</span>
+            <span class="px-2.5 py-1 rounded bg-emerald-50 text-emerald-600 border border-emerald-200 font-medium">离线核心实验</span>
+        </div>
+    </header>
+
+    <!-- 主展示区域 -->
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 min-h-0">
+        
+            <!-- 左侧控制和教学面板 (占 4 列) -->
+        <section class="lg:col-span-4 flex flex-col gap-4 overflow-y-auto pr-1">
+
+            <!-- 导学目标与任务入口 -->
+            <div class="bg-white border border-sky-200 rounded-xl p-4 shadow-sm">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                        <span class="w-1.5 h-3 bg-sky-500 rounded-full"></span> 本次探究目标
+                    </h3>
+                    <span class="text-[10px] text-slate-400 font-mono">v1.1.0</span>
+                </div>
+                <p class="text-xs text-slate-500 leading-relaxed mb-3">通过预测、调节、测量和解释，理解横波振动方向与偏振现象的关系。</p>
+                <label for="learning-mode" class="block text-sm font-semibold text-slate-600 mb-1">使用方式</label>
+                <select id="learning-mode" onchange="setLearningMode(this.value)" class="w-full mb-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700">
+                    <option value="student">学生探究：先预测，再操作</option>
+                    <option value="teacher">教师演示：自由调节参数</option>
+                </select>
+                <p id="exploration-access" class="text-slate-500 mb-3" aria-live="polite">完成本任务的两个预测后解锁实验操作。</p>
+                <div class="grid grid-cols-3 gap-1.5 mb-3">
+                    <button onclick="startTask('A')" class="task-entry py-2 px-1 rounded border border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px] font-semibold">A 横波类比</button>
+                    <button onclick="startTask('B')" class="task-entry py-2 px-1 rounded border border-sky-200 bg-sky-50 text-sky-700 text-[10px] font-semibold">B 起偏检偏</button>
+                    <button onclick="startTask('C')" class="task-entry py-2 px-1 rounded border border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-semibold">C 生活应用</button>
+                </div>
+            <div id="task-panel" class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-600 leading-relaxed">
+                    <strong class="text-slate-800">当前任务：B 起偏与检偏</strong>
+                    <p class="mt-1">先预测检偏器转到45°和90°时的输出，再观察光强与夹角的变化。</p>
+                    <div id="prediction-box" class="mt-3 border-t border-slate-200 pt-2">
+                        <label class="block text-[10px] font-semibold text-slate-500 mb-1">先做预测：两透振轴成45°时，I₂/I₀约为？</label>
+                        <div class="grid grid-cols-3 gap-1.5">
+                            <button onclick="submitPrediction('50%')" class="prediction-option py-1.5 rounded border border-slate-200 bg-white text-[10px]">50%</button>
+                            <button onclick="submitPrediction('25%')" class="prediction-option py-1.5 rounded border border-slate-200 bg-white text-[10px]">25%</button>
+                            <button onclick="submitPrediction('0%')" class="prediction-option py-1.5 rounded border border-slate-200 bg-white text-[10px]">0%</button>
+                        </div>
+                        <div id="prediction-feedback" class="mt-2 text-[10px] text-slate-400">提交预测后再观察仿真结果。</div>
+                    </div>
+            </div>
+            </div>
+            
+            <!-- 模块切换卡片 -->
+            <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                <h3 class="text-sm font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
+                    <span class="w-1.5 h-3 bg-sky-500 rounded-full"></span> 模型模式切换
+                </h3>
+                <p class="text-[10px] text-slate-400 mb-3">默认进入真实光学模型；机械波仅用于建立横波方向类比。</p>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="btn-mode-mech" onclick="switchMode('mechanical')" class="py-3 px-4 rounded-lg font-semibold transition duration-200 border text-center flex flex-col items-center justify-center gap-1 bg-slate-100 border-slate-200 text-slate-500 hover:text-slate-800">
+                        <span class="text-sm">A. 机械波类比</span>
+                        <span class="text-[10px] opacity-75">（绳波与狭缝）</span>
+                    </button>
+                    <button id="btn-mode-light" onclick="switchMode('light')" class="py-3 px-4 rounded-lg font-semibold transition duration-200 border text-center flex flex-col items-center justify-center gap-1 bg-sky-50 border-sky-200 text-sky-700 shadow-sm">
+                        <span class="text-sm">B. 光波偏振探究</span>
+                        <span class="text-[10px] opacity-75">（起偏与检偏）</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 参数控制面板 -->
+            <div id="teaching-controls-panel" class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex-1 flex flex-col gap-2">
+                <h3 class="text-sm font-semibold text-slate-500 flex items-center gap-1.5">
+                    <span class="w-1.5 h-3 bg-sky-500 rounded-full"></span> 物理教学参数控制
+                </h3>
+
+                <!-- 机械波特有控制 -->
+                <div id="mech-controls" class="space-y-4 hidden">
+                    <!-- 波形选择 -->
+                    <div class="bg-slate-50 p-3.5 rounded-lg border border-slate-200">
+                        <label class="block text-xs font-semibold text-slate-500 mb-2">选择机械波类型</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button id="btn-wave-trans" onclick="setMechWaveType('transverse')" class="py-2 px-3 rounded text-xs font-bold border bg-indigo-100 border-indigo-300 text-indigo-700 transition">
+                                绳横波 (Transverse)
+                            </button>
+                            <button id="btn-wave-long" onclick="setMechWaveType('longitudinal')" class="py-2 px-3 rounded text-xs font-bold border bg-white border-slate-200 text-slate-500 hover:text-slate-800 transition">
+                                弹簧纵波 (Longitudinal)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 狭缝 1 状态 -->
+                    <div class="bg-slate-50 p-3.5 rounded-lg border border-slate-200 flex justify-between items-center">
+                        <div>
+                            <span class="block text-xs font-semibold text-slate-500">允许方向 1（机械类比）</span>
+                            <span class="text-[10px] text-slate-400">仅用于理解横波振动方向，不等同真实偏振片</span>
+                        </div>
+                        <span class="text-xs font-bold font-mono text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-200">竖直 (90°)</span>
+                    </div>
+
+                    <!-- 狭缝 2 角度 -->
+                    <div class="bg-slate-50 p-3.5 rounded-lg border border-slate-200">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs font-semibold text-slate-600">旋转允许方向 2（类比角度）</span>
+                            <span id="slit2-val" class="text-xs font-bold font-mono text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-200">90°</span>
+                        </div>
+                        <input type="range" id="slider-slit2" min="0" max="180" step="1" value="90" oninput="updateParams()" class="w-full">
+                        <div class="flex justify-between text-[10px] text-slate-400 mt-1.5 font-medium">
+                            <span>水平 (0°)</span>
+                            <span>竖直 (90°)</span>
+                            <span>水平 (180°)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 光波特有控制 (初始隐藏) -->
+                <div id="light-controls" class="space-y-4">
+                    <!-- 光源属性 -->
+                    <div class="bg-slate-50 p-3.5 rounded-lg border border-slate-200 flex justify-between items-center">
+                        <div>
+                            <span class="block text-xs font-semibold text-slate-500">初始入射光源</span>
+                            <span class="text-[10px] text-slate-400">36个偏振方向的离散可视化近似，颜色仅用于区分方向</span>
+                        </div>
+                        <span class="text-xs font-bold text-sky-700 bg-sky-50 px-2.5 py-1 rounded border border-sky-200">自然光</span>
+                    </div>
+
+                    <!-- 起偏器固定 -->
+                    <div class="bg-slate-50 p-3.5 rounded-lg border border-slate-200 flex justify-between items-center">
+                        <div>
+                            <span class="block text-xs font-semibold text-slate-500">起偏器 (Polarizer) 轴向</span>
+                            <span class="text-[10px] text-slate-400">理想模型：透振轴固定为竖直，忽略吸收和反射损耗</span>
+                        </div>
+                        <span class="text-xs font-bold font-mono text-sky-700 bg-sky-50 px-2.5 py-1 rounded border border-sky-200">竖直 (90°)</span>
+                    </div>
+
+                    <!-- 检偏器角度 -->
+                    <div class="bg-slate-50 p-3.5 rounded-lg border border-slate-200">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs font-semibold text-slate-600">旋转 检偏器 (Analyzer) 轴向</span>
+                            <span id="pol2-val" class="text-xs font-bold font-mono text-sky-700 bg-sky-50 px-2.5 py-1 rounded border border-sky-200">90°</span>
+                        </div>
+                        <input type="range" id="slider-pol2" min="0" max="180" step="1" value="90" oninput="updateParams()" class="w-full">
+                        <div class="flex justify-between text-[10px] text-slate-400 mt-1.5 font-medium">
+                            <span>水平 (0°)</span>
+                            <span>竖直 (90°)</span>
+                            <span>水平 (180°)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 辅助演示自动化控制 -->
+                <div class="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-3">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="check-autorotate" onchange="toggleAutoRotate()" class="rounded border-slate-300 text-sky-500 bg-white focus:ring-0 w-4 h-4 cursor-pointer">
+                        <label for="check-autorotate" class="text-xs font-medium text-slate-600 cursor-pointer select-none">让检偏镜（狭缝2）在课堂上自动连续慢速旋转</label>
+                    </div>
+                </div>
+
+                <!-- 一键快捷演示方案 (极度方便老师讲课) -->
+                <div class="mt-auto pt-2 border-t border-slate-100">
+                    <span class="block text-xs font-semibold text-slate-500 mb-2">关键状态与教师演示</span>
+                    <div class="grid grid-cols-2 gap-2" id="quick-demos-mech">
+                        <button data-preset="mech-trans-aligned" onclick="applyPreset('mech-trans-aligned')" class="demo-preset bg-slate-100 hover:bg-slate-200 border border-slate-200 py-2.5 px-3 rounded-lg text-xs text-left text-slate-700 font-semibold transition">
+                            1. 横波类比-方向平行
+                        </button>
+                        <button data-preset="mech-trans-crossed" onclick="applyPreset('mech-trans-crossed')" class="demo-preset bg-slate-100 hover:bg-slate-200 border border-slate-200 py-2.5 px-3 rounded-lg text-xs text-left text-slate-700 font-semibold transition">
+                            2. 横波类比-方向垂直
+                        </button>
+                        <button data-preset="mech-long-parallel" onclick="applyPreset('mech-long-parallel')" class="demo-preset bg-slate-100 hover:bg-slate-200 border border-slate-200 py-2.5 px-3 rounded-lg text-xs text-left text-slate-700 font-semibold transition">
+                            3. 纵波类比-方向平行
+                        </button>
+                        <button data-preset="mech-long-aligned" onclick="applyPreset('mech-long-aligned')" class="demo-preset bg-slate-100 hover:bg-slate-200 border border-slate-200 py-2.5 px-3 rounded-lg text-xs text-left text-slate-700 font-semibold transition">
+                            4. 纵波类比-方向垂直
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 hidden" id="quick-demos-light">
+                        <button data-preset="light-parallel" onclick="applyPreset('light-parallel')" class="demo-preset bg-slate-100 hover:bg-slate-200 border border-slate-200 py-2.5 px-3 rounded-lg text-xs text-left text-slate-700 font-semibold transition">
+                            1. 两透振轴平行 (I₂/I₀=50%)
+                        </button>
+                        <button data-preset="light-crossed" onclick="applyPreset('light-crossed')" class="demo-preset bg-slate-100 hover:bg-slate-200 border border-slate-200 py-2.5 px-3 rounded-lg text-xs text-left text-slate-700 font-semibold transition">
+                            2. 两透振轴垂直 (理想消光)
+                        </button>
+                        <button data-preset="light-45" onclick="applyPreset('light-45')" class="demo-preset bg-slate-100 hover:bg-slate-200 border border-slate-200 py-2.5 px-3 rounded-lg text-xs text-left text-sky-700 font-semibold transition col-span-2">
+                            3. 两透振轴成45° (I₂/I₀=25%)
+                        </button>
+                        <button data-preset="light-30" onclick="applyPreset('light-30')" class="demo-preset bg-slate-100 hover:bg-slate-200 border border-slate-200 py-2.5 px-3 rounded-lg text-xs text-left text-slate-700 font-semibold transition">4. 夹角30° (约37.5%)</button>
+                        <button data-preset="light-60" onclick="applyPreset('light-60')" class="demo-preset bg-slate-100 hover:bg-slate-200 border border-slate-200 py-2.5 px-3 rounded-lg text-xs text-left text-slate-700 font-semibold transition">5. 夹角60° (约12.5%)</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 高中物理偏振知识卡片 -->
+            <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm text-xs space-y-2.5">
+                <h4 class="font-bold text-slate-800 border-b border-slate-100 pb-1.5 flex items-center justify-between">
+                    <span>物理模型与概念边界</span>
+                    <span id="knowledge-badge" class="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-semibold">机械波类比</span>
+                </h4>
+                <div id="knowledge-text" class="text-slate-500 leading-relaxed space-y-2">
+                    <p><strong>类比关系：</strong> 绳横波具有垂直于传播方向的振动方向，旋转允许方向可观察到振幅投影变化。该场景用于建立直觉，不等同于真实光学器件。</p>
+                    <p><strong>科学结论：</strong> 偏振现象是横波的特征；光具有偏振现象，说明光具有横波性质。</p>
+                    <button onclick="showModelInfo()" class="text-sky-700 font-semibold text-[11px] hover:underline">查看模型假设与变量说明</button>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- 右侧 3D 仿真主视口 + AI 互动研讨室 (占 8 列) -->
+        <section id="simulation-column" class="lg:col-span-8 flex flex-col gap-4 min-h-0">
+            
+            <!-- 3D 渲染容器及悬浮反馈 -->
+            <div id="simulation-viewport" class="flex-1 min-h-[500px] bg-slate-50 border border-slate-200 rounded-xl overflow-hidden relative shadow-md">
+                <!-- 3D 渲染容器 -->
+                <div id="three-container" class="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing bg-slate-50"></div>
+
+                <!-- 右上角悬浮实时指标 (科学感) -->
+                <div id="metrics-panel" class="top-4 right-4 p-4 bg-white/95 backdrop-blur border border-slate-200 rounded-xl flex flex-col gap-2 shadow-md z-10">
+                    <div class="metrics-drag-handle flex justify-between items-center border-b border-slate-100 pb-2" title="拖动此处调整位置">
+                        <span class="text-xs text-slate-500 font-semibold">检测端定量反馈 <span class="text-[10px] text-slate-400 font-normal">可拖动 / 缩放</span></span>
+                        <div class="flex items-center gap-1">
+                            <span id="state-tag" class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-200">振动无损</span>
+                            <button type="button" class="metrics-reset text-[10px] text-slate-400 hover:text-sky-600" onclick="resetMetricsPanel(event)" title="恢复默认位置和大小">↺</button>
+                        </div>
+                    </div>
+                    <div id="model-assumption-tag" class="text-[10px] text-slate-500 leading-relaxed">理想偏振片模型：忽略吸收、反射和漏光</div>
+                    <!-- 统一物理量反馈：光学模式显示 I1/I0、I2/I0、I2/I1；机械模式只显示 A/A0 -->
+                    <div id="light-metrics" class="space-y-1.5">
+                        <div class="flex justify-between text-[10px]"><span class="text-slate-400">第一片后 I₁/I₀</span><span id="i1-ratio-text" class="font-bold font-mono text-sky-700">50%</span></div>
+                        <div class="flex justify-between text-[10px]"><span class="text-slate-400">检偏后 I₂/I₀</span><span id="i2-ratio-text" class="font-bold font-mono text-emerald-600">50%</span></div>
+                        <div class="flex justify-between text-[10px]"><span class="text-slate-400">相对透过率 I₂/I₁</span><span id="i2-i1-ratio-text" class="font-bold font-mono text-indigo-600">100%</span></div>
+                    </div>
+                    <div id="mechanical-metric" class="hidden flex justify-between text-[10px]">
+                        <span class="text-slate-400">机械类比相对振幅 A/A₀</span><span id="amplitude-ratio-text" class="font-bold font-mono text-indigo-600">100%</span>
+                    </div>
+                    <!-- 接收强度条 -->
+                    <div id="intensity-meter">
+                        <div class="flex justify-between text-[10px] mb-1">
+                            <span id="intensity-label" class="text-slate-400 font-medium">相对入射光强 I₂/I₀:</span>
+                            <span id="intensity-text" class="font-bold font-mono text-emerald-600 text-xs">100%</span>
+                        </div>
+                        <div class="w-full bg-slate-100 h-2 rounded overflow-hidden">
+                            <div id="intensity-bar" class="bg-gradient-to-r from-emerald-500 to-teal-500 h-full w-full transition-all duration-100"></div>
+                        </div>
+                    </div>
+                    <!-- 夹角指示 -->
+                    <div class="flex justify-between text-[10px] pt-1">
+                        <span id="angle-label" class="text-slate-400 font-medium">两透振轴夹角 θ:</span>
+                        <span id="relative-angle" class="font-bold font-mono text-slate-700">0° (平行)</span>
+                    </div>
+                </div>
+
+                <!-- 方向图例 -->
+                <div class="absolute bottom-14 left-4 bg-white/90 border border-slate-200 rounded-lg px-3 py-2 text-[10px] text-slate-600 shadow-sm z-10 leading-relaxed">
+                    <div class="font-bold text-slate-700 mb-1">方向图例</div>
+                    <div id="direction-legend">k 传播方向　E 电场振动方向</div>
+                    <div id="axis-legend">P/A 起偏/检偏透振轴　颜色仅区分方向</div>
+                </div>
+
+                <div class="absolute top-4 left-4 bg-white/90 border border-slate-200 rounded-lg px-3 py-2 text-[10px] text-slate-600 shadow-sm z-10 leading-relaxed">
+                    <div class="font-bold text-slate-700">探究步骤</div>
+                    <div>① 先预测　② 调节变量　③ 记录数据　④ 解释结论</div>
+                </div>
+
+                <!-- 底部 3D 操控与视图工具条 -->
+                <div class="absolute bottom-0 inset-x-0 bg-slate-50/95 border-t border-slate-200 px-4 py-2.5 flex justify-between items-center shrink-0 z-10">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                        <span class="text-xs font-medium text-slate-500" id="anim-state">仿真正在实时渲染</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="resetCamera()" class="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 transition rounded-lg text-[11px] flex items-center gap-1 font-semibold shadow-sm">
+                            <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                            重置视角
+                        </button>
+                        <button id="btn-play-pause" onclick="togglePlayPause()" class="px-2.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white transition rounded-lg text-[11px] flex items-center gap-1 font-semibold shadow-sm">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" id="svg-pause">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <svg class="w-4 h-4 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" id="svg-play">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span id="btn-play-text">暂停仿真</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 操作引导层 (3秒后自动淡出) -->
+                <div id="gesture-guide" class="absolute inset-0 bg-slate-50/90 backdrop-blur-sm flex items-center justify-center pointer-events-none transition-opacity duration-1000 z-30">
+                    <div class="text-center p-6 max-w-sm">
+                        <div class="flex justify-center mb-3">
+                            <svg class="w-12 h-12 text-sky-500 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                            </svg>
+                        </div>
+                        <h5 class="font-bold text-slate-800 text-base mb-1">3D 模型支持手势自由观察</h5>
+                        <p class="text-xs text-slate-500">按住左键拖拽旋转，滚轮缩放。多角度观察横波空间平面。</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white border border-slate-200 rounded-xl p-3 shadow-sm shrink-0">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-semibold text-slate-700">实验记录</span>
+                    <span id="measurement-count" class="text-[10px] text-slate-400">0 条记录</span>
+                </div>
+                <div id="last-measurement" class="text-[11px] text-slate-500 mb-2">尚未记录</div>
+                <div class="flex gap-2">
+                    <button onclick="recordMeasurement()" class="flex-1 px-2 py-1.5 bg-sky-50 border border-sky-200 text-sky-700 rounded text-[11px] font-semibold">记录当前状态</button>
+                    <button onclick="clearMeasurements()" class="px-2 py-1.5 bg-white border border-slate-200 text-slate-600 rounded text-[11px]">清空</button>
+                    <button onclick="downloadMeasurements()" class="px-2 py-1.5 bg-white border border-slate-200 text-slate-600 rounded text-[11px]">导出</button>
+                    <button onclick="printExperimentReport()" class="px-2 py-1.5 bg-white border border-slate-200 text-slate-600 rounded text-[11px]">报告</button>
+                </div>
+                    <div id="curve-summary" class="mt-2 text-[10px] text-slate-400">记录数据后生成理论关系摘要。</div>
+                <canvas id="curve-canvas" width="520" height="180" class="block w-full h-[180px] mt-2 rounded border border-slate-100 bg-slate-50"></canvas>
+            </div>
+
+            <!-- 偏振实例科普模块：位于实验记录之后、在线AI答疑之前 -->
+            <div id="polarization-examples" class="bg-white border border-sky-200 rounded-xl p-4 shadow-sm space-y-3 shrink-0">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <h4 class="font-bold text-slate-800 text-base flex items-center gap-1.5"><span class="w-1.5 h-4 bg-sky-500 rounded-full"></span>偏振实例</h4>
+                    <span class="text-xs text-slate-400">图片 + 原理解释</span>
+                </div>
+                <div id="example-tabs" class="grid grid-cols-2 gap-2">
+                    <button class="example-tab active" data-example="rotation" onclick="selectPolarizationExample('rotation')">旋光效应</button>
+                    <button class="example-tab" data-example="3d" onclick="selectPolarizationExample('3d')">3D 电影</button>
+                    <button class="example-tab" data-example="camera" onclick="selectPolarizationExample('camera')">偏振镜头</button>
+                    <button class="example-tab" data-example="lcd" onclick="selectPolarizationExample('lcd')">液晶屏幕</button>
+                </div>
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
+                    <div>
+                        <img id="example-image" src="assets/polarization-3d.svg" alt="偏振3D电影示意图" hidden class="w-full aspect-[2/1] object-cover rounded-lg border border-slate-200 bg-slate-50">
+                        <div id="rotation-gallery" class="rotation-gallery visible" aria-label="旋光效应实验图片：上排三张，下排三张">
+                            <img src="assets/rotation-experiment-1.png" alt="旋光效应实验图 1">
+                            <img src="assets/rotation-experiment-2.png" alt="旋光效应实验图 2">
+                            <img src="assets/rotation-experiment-3.png" alt="旋光效应实验图 3">
+                            <img src="assets/rotation-experiment-4.png" alt="旋光效应实验图 4">
+                            <img src="assets/rotation-experiment-5.png" alt="旋光效应实验图 5">
+                            <img src="assets/rotation-experiment-6.png" alt="旋光效应实验图 6">
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <h5 id="example-title" class="text-lg font-bold text-slate-800">旋光效应</h5>
+                        <p id="example-description" class="text-sm text-slate-600 leading-relaxed">线偏振光通过石英、糖溶液等旋光物质后，偏振方向会发生旋转。旋转角与材料性质、传播长度和浓度有关。</p>
+                        <div id="example-principle" class="rounded-lg bg-sky-50 border border-sky-100 px-3 py-2 text-sm text-sky-800 leading-relaxed">关键关系：偏振方向旋转后，可通过检偏器角度变化测出旋转角。</div>
+                        <div id="example-connection" class="text-sm text-slate-500">与本实验的联系：先用起偏器获得线偏振光，再用检偏器寻找透射最强或最弱的位置。</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 下方新增：AI 物理助教 · 互动研讨室面板 -->
+                <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-md flex flex-col gap-3 min-h-[250px] max-h-[300px] overflow-hidden shrink-0">
+                <!-- 助教面板页眉 -->
+                <div class="flex justify-between items-center border-b border-slate-100 pb-2 shrink-0">
+                    <div class="flex items-center gap-2">
+                        <div class="w-2.5 h-2.5 rounded-full bg-sky-500 animate-pulse"></div>
+                        <span class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            在线AI答疑
+                        </span>
+                        <span id="ai-connection-status" class="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-mono">待提问</span>
+                    </div>
+                    <!-- 一键快速研判（免打字按钮） -->
+                    <button id="btn-ai-analyze" onclick="quickAnalyzeCurrentScene()" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-lg text-[11px] font-bold transition flex items-center gap-1">
+                        ⚡ 一键研判实况
+                    </button>
+                </div>
+                
+                <!-- 聊天对话框历史记录区 -->
+                <div class="flex-1 overflow-y-auto text-xs space-y-3 pr-1" id="ai-chat-messages">
+                    <!-- 初始系统欢迎消息 -->
+                    <div class="flex items-start gap-2.5">
+                        <div class="w-6 h-6 rounded-full bg-sky-100 border border-sky-200 flex items-center justify-center shrink-0 text-xs">🤖</div>
+                        <div class="bg-slate-100 text-slate-700 p-2.5 rounded-xl max-w-[85%] leading-relaxed shadow-2xs">
+                            <p class="font-semibold mb-1">我是在线AI物理答疑助手。</p>
+                            <p class="text-slate-500 mb-2">可以自由提问或追问。我会结合当前 3D 仿真画面与实验参数回答；若图像接口不可用，状态会明确显示仅依据参数作答。</p>
+                            <div class="flex flex-wrap gap-1.5 text-[10px] pt-1">
+                                <button onclick="quickAsk('当前状态的核心结论是什么？')" class="px-2 py-1 bg-white hover:bg-slate-50 border border-slate-200 rounded text-sky-600 transition font-medium">核心结论</button>
+                                <button onclick="quickAsk('为什么45度时不是完全消光？')" class="px-2 py-1 bg-white hover:bg-slate-50 border border-slate-200 rounded text-sky-600 transition font-medium">45°状态</button>
+                                <button onclick="quickAsk('机械波类比和光学模型有什么不同？')" class="px-2 py-1 bg-white hover:bg-slate-50 border border-slate-200 rounded text-sky-600 transition font-medium">类比边界</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 对话输入栏 -->
+                <div class="border-t border-slate-100 pt-2 flex gap-2 shrink-0">
+                    <input type="text" id="ai-chat-input" onkeydown="handleInputKey(event)" placeholder="直接在此输入您的物理疑问（例如：偏振片在生活中有什么用？）" class="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 text-slate-800">
+                    <button id="btn-ai-send" onclick="sendUserQuestion()" class="px-4 py-1.5 bg-gradient-to-r from-sky-500 to-indigo-600 text-white rounded-lg text-xs font-bold shadow-sm hover:from-sky-600 hover:to-indigo-700 transition flex items-center justify-center gap-1 shrink-0">
+                        发送
+                    </button>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- 教师课后说明补充 -->
+    <footer class="bg-white border-t border-slate-200 py-3 text-center text-xs text-slate-400 shrink-0 shadow-inner">
+        理想模型说明：自然光通过第一片后相对光强为50%，检偏器后的相对入射光强按两透振轴夹角变化；机械波场景仅用于类比横波振动方向。
+    </footer>
+
+    <!-- ===================== 核心 JavaScript 偏振计算与渲染引擎 ===================== -->
+    <script>
+        // === 全局状态管理 ===
+        let currentMode = 'light'; // 'mechanical' (机械类比) 或 'light' (光偏振)
+        let mechWaveType = 'transverse'; // 'transverse' (横波) 或 'longitudinal' (纵波)
+        
+        let isPlaying = true;
+        let time = 0;
+        let autoRotateActive = false;
+        let activeTask = 'B';
+        let measurementLog = [];
+        let appReady = false;
+        let learningMode = 'student';
+        const taskPredictions = { A: {first: null, second: null}, B: {first: null, second: null} };
+        const taskConclusions = { A: '', B: '', C: '' };
+        const taskProgress = Object.fromEntries(['A', 'B', 'C'].map(task => [task, {predicted: false, measured: false, explained: false, correct: null, observations: {}, reviews: []}]));
+        let applicationScenario = 'glare';
+        const applicationAnswers = Object.fromEntries(['glare', 'lcd', 'stereo'].map(key => [key, {observed: false, observation: null, explanation: '', reason: '', submitted: false, correct: null, reviews: []}]));
+        const OUTPUT_EPSILON = 1e-10;
+
+        // 物理锁定参数 (硬编码保证演示最平稳美观，不向用户提供干扰滑块)
+        const amp = 0.8;         // 固定振幅
+        const speed = 4.5;       // 固定物理波传播相速
+        const freq = 1.65;       // 固定空间频率 (波数)
+        
+        // 旋转角度 (弧度)
+        const angle1 = Math.PI / 2; // 起偏片 1 角度：已完全固定为竖直方向 (90度)
+        let angle2 = Math.PI / 2;     // 仅开放检偏片 2 的角度调节控制 (默认90度 - 竖直)
+
+        // Three.js 核心对象
+        let scene, camera, renderer, controls;
+        let container = document.getElementById('three-container');
+
+        // 3D 模型组件引用
+        let floorGrid;
+        let emitterObj;          // 发射源
+        let polarizer1Group;     // 偏振器/狭缝 1
+        let polarizer2Group;     // 偏振器/狭缝 2
+        let screenObj;           // 光屏
+        let screenSpot;          // 投射光斑
+        let screenSpotBack;      // 从背面观察时可见的透射光屏示意
+        let sceneLabels = {};
+        let metricsDragState = null;
+        const metricsPanelDefaults = {top: 16, right: 16, width: 270, height: 0};
+        
+        // 波形几何结构和材质
+        let waveLines = [];       // 横波 Line 数组
+        let longitudinalRings = []; // 纵波 Mesh 数组 (展示弹簧纵波)
+        let laserBeamMesh;       // 激光束外衣
+        
+        // 自然光在垂直于传播方向的横截面内沿所有方向等强振动。
+        // 屏幕无法绘制连续无穷多个方向，这里用 36 个等间隔方向作高密度离散近似。
+        const NATURAL_LIGHT_DIRECTION_COUNT = 36;
+        const naturalLightColors = Array.from({ length: NATURAL_LIGHT_DIRECTION_COUNT }, (_, index) => {
+            const color = new THREE.Color();
+            color.setHSL(index / NATURAL_LIGHT_DIRECTION_COUNT, 0.82, 0.52);
+            return color;
+        });
+
+        // 空间布局常量 (X轴作为传播方向)
+        const X_MIN = -8.0;
+        const X_MAX = 8.0;
+        const X_SLIT1 = -2.5;  // 狭缝1坐标
+        const X_SLIT2 = 2.5;   // 狭缝2坐标
+        const X_SCREEN = 7.5;  // 接收端/光屏坐标
+
+        // === 1. 初始化 3D 渲染环境 (启用 preserveDrawingBuffer 用于 AI 画面捕获) ===
+        function initThree() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf8fafc); // Slate-50 干净底色
+
+            // 相机
+            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+            camera.position.set(13, 8, 11); // isometric 观察视角
+
+            // 渲染器 - 【关键】：设置 preserveDrawingBuffer: true，使得 toDataURL 截图能成功捕获画布图像而不会黑屏
+            renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            // 轨道控制器 (OrbitControls)
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 + 0.1; // 限制镜头入地下
+            controls.minDistance = 5;
+            controls.maxDistance = 25;
+
+            // 环境光源
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+
+            // 主白炽方向光
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(10, 15, 10);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            // 增加侧面反射光源
+            const sideLight = new THREE.DirectionalLight(0xe0f2fe, 0.5);
+            sideLight.position.set(-10, -5, -5);
+            scene.add(sideLight);
+
+            // 建立参考网格地板 (浅灰网格)
+            floorGrid = new THREE.GridHelper(24, 24, 0xe2e8f0, 0xf1f5f9);
+            floorGrid.position.y = -3.5;
+            scene.add(floorGrid);
+
+            // 构建静态物理器件
+            buildApparatus();
+            createScientificAnnotations();
+            initMetricsPanel();
+            const examplesPanel = document.getElementById('polarization-examples');
+            if (examplesPanel && currentMode === 'mechanical') examplesPanel.classList.add('hidden');
+
+            // 构建波场
+            rebuildWaves();
+
+            // 视口响应
+            window.addEventListener('resize', onWindowResize);
+            new ResizeObserver(onWindowResize).observe(container);
+
+            // 手势指引淡出
+            setTimeout(() => {
+                const guide = document.getElementById('gesture-guide');
+                if (guide) {
+                    guide.classList.add('opacity-0');
+                    setTimeout(() => guide.remove(), 1000);
+                }
+            }, 3000);
+        }
+
+        function initMetricsPanel() {
+            const panel = document.getElementById('metrics-panel');
+            const handle = panel?.querySelector('.metrics-drag-handle');
+            if (!panel || !handle) return;
+            const saved = localStorage.getItem('polarization-metrics-panel');
+            if (saved) {
+                try {
+                    const state = JSON.parse(saved);
+                    if (Number.isFinite(state.left)) panel.style.left = `${state.left}px`;
+                    if (Number.isFinite(state.top)) panel.style.top = `${state.top}px`;
+                    panel.style.right = 'auto';
+                    if (Number.isFinite(state.width)) panel.style.width = `${state.width}px`;
+                    if (Number.isFinite(state.height) && state.height > 0) panel.style.height = `${state.height}px`;
+                } catch { localStorage.removeItem('polarization-metrics-panel'); }
+            }
+            const stopDrag = () => {
+                if (!metricsDragState) return;
+                const rect = panel.getBoundingClientRect();
+                const parent = panel.parentElement.getBoundingClientRect();
+                panel.style.left = `${Math.max(0, Math.min(parent.width - rect.width, rect.left - parent.left))}px`;
+                panel.style.top = `${Math.max(0, Math.min(parent.height - rect.height, rect.top - parent.top))}px`;
+                panel.style.right = 'auto';
+                localStorage.setItem('polarization-metrics-panel', JSON.stringify({left: parseFloat(panel.style.left), top: parseFloat(panel.style.top), width: panel.offsetWidth, height: panel.offsetHeight}));
+                metricsDragState = null;
+            };
+            handle.addEventListener('pointerdown', event => {
+                if (event.target.closest('button')) return;
+                const rect = panel.getBoundingClientRect();
+                metricsDragState = {offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top};
+                handle.setPointerCapture(event.pointerId);
+            });
+            handle.addEventListener('pointermove', event => {
+                if (!metricsDragState) return;
+                const parent = panel.parentElement.getBoundingClientRect();
+                const rect = panel.getBoundingClientRect();
+                panel.style.left = `${Math.max(0, Math.min(parent.width - rect.width, event.clientX - parent.left - metricsDragState.offsetX))}px`;
+                panel.style.top = `${Math.max(0, Math.min(parent.height - rect.height, event.clientY - parent.top - metricsDragState.offsetY))}px`;
+                panel.style.right = 'auto';
+            });
+            handle.addEventListener('pointerup', stopDrag);
+            handle.addEventListener('pointercancel', stopDrag);
+            new ResizeObserver(() => {
+                if (!metricsDragState) {
+                    const rect = panel.getBoundingClientRect();
+                    if (rect.width && rect.height) localStorage.setItem('polarization-metrics-panel', JSON.stringify({left: parseFloat(panel.style.left) || null, top: parseFloat(panel.style.top) || null, width: panel.offsetWidth, height: panel.offsetHeight}));
+                }
+            }).observe(panel);
+        }
+
+        function resetMetricsPanel(event) {
+            event?.stopPropagation();
+            const panel = document.getElementById('metrics-panel');
+            if (!panel) return;
+            panel.style.left = '';
+            panel.style.top = `${metricsPanelDefaults.top}px`;
+            panel.style.right = `${metricsPanelDefaults.right}px`;
+            panel.style.width = `${metricsPanelDefaults.width}px`;
+            panel.style.height = '';
+            localStorage.removeItem('polarization-metrics-panel');
+        }
+
+        function createSceneLabel(text, color = '#334155') {
+            const canvas = document.createElement('canvas');
+            // 3D 标签使用独立 Canvas，网页 CSS 不会放大它；提高分辨率和字号保证 100% 缩放下可读。
+            canvas.width = 840; canvas.height = 144;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.font = 'bold 42px Arial, Microsoft YaHei, sans-serif';
+            ctx.fillStyle = color; ctx.fillText(text, 8, 42);
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            const material = new THREE.SpriteMaterial({map: texture, transparent: true, depthTest: false});
+            const sprite = new THREE.Sprite(material);
+            sprite.scale.set(3.8, 0.65, 1);
+            sprite.renderOrder = 20;
+            scene.add(sprite);
+            return sprite;
+        }
+
+        function createScientificAnnotations() {
+            sceneLabels.k = createSceneLabel('k 传播方向', '#0369a1');
+            sceneLabels.p = createSceneLabel('P 起偏器透振轴', '#e11d48');
+            sceneLabels.a = createSceneLabel('A 检偏器透振轴', '#e11d48');
+            sceneLabels.segment1 = createSceneLabel('自然光：多方向离散近似', '#64748b');
+            sceneLabels.segment2 = createSceneLabel('线偏振光', '#0369a1');
+            sceneLabels.segment3 = createSceneLabel('检偏后光', '#0284c7');
+        }
+
+        function updateScientificAnnotations() {
+            if (!sceneLabels.k) return;
+            const labelMode = currentMode === 'light' ? 'light' : mechWaveType;
+            if (sceneLabels.mode !== labelMode) {
+                const names = currentMode === 'light' ? ['P 起偏器透振轴', 'A 检偏器透振轴']
+                    : mechWaveType === 'longitudinal' ? ['方向示意 1（不筛选纵波）', '方向示意 2（不筛选纵波）']
+                    : ['允许方向 1（横波类比）', '允许方向 2（横波类比）'];
+                ['p', 'a'].forEach((key, index) => {
+                    scene.remove(sceneLabels[key]);
+                    sceneLabels[key].material.map.dispose();
+                    sceneLabels[key].material.dispose();
+                    sceneLabels[key] = createSceneLabel(names[index], '#e11d48');
+                });
+                sceneLabels.mode = labelMode;
+            }
+            sceneLabels.k.position.set(0, 2.55, 0);
+            sceneLabels.p.position.set(X_SLIT1 - 0.45, 2.35, 0);
+            sceneLabels.a.position.set(X_SLIT2 - 0.45, 2.35, 0);
+            sceneLabels.segment1.visible = currentMode === 'light';
+            sceneLabels.segment2.visible = currentMode === 'light';
+            sceneLabels.segment3.visible = currentMode === 'light';
+            sceneLabels.segment1.position.set(-5.5, -2.45, 0);
+            sceneLabels.segment2.position.set(0, -2.45, 0);
+            sceneLabels.segment3.position.set(5.2, -2.45, 0);
+        }
+
+        // === 2. 构建模拟器件 ===
+        function buildApparatus() {
+            // A. 发射器金属底座
+            const emitterGeo = new THREE.CylinderGeometry(0.8, 1.0, 1.2, 16);
+            emitterGeo.rotateZ(Math.PI / 2);
+            const emitterMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.3, metalness: 0.8 });
+            emitterObj = new THREE.Mesh(emitterGeo, emitterMat);
+            emitterObj.position.set(X_MIN - 0.6, 0, 0);
+            scene.add(emitterObj);
+
+            // 发射源内凹球体发光点
+            const coreGeo = new THREE.SphereGeometry(0.5, 16, 16);
+            const coreMat = new THREE.MeshBasicMaterial({ color: 0x0284c7 });
+            const core = new THREE.Mesh(coreGeo, coreMat);
+            core.position.set(X_MIN, 0, 0);
+            scene.add(core);
+
+            // B. 偏振片 / 狭缝 1 (已锁死 90°)
+            polarizer1Group = createPolarizerDevice("起偏器", 0x4f46e5); 
+            polarizer1Group.position.set(X_SLIT1, 0, 0);
+            polarizer1Group.rotation.x = 0; 
+            scene.add(polarizer1Group);
+
+            // C. 偏振片 / 狭缝 2 (支持轴旋转)
+            polarizer2Group = createPolarizerDevice("检偏器", 0x0ea5e9); 
+            polarizer2Group.position.set(X_SLIT2, 0, 0);
+            polarizer2Group.rotation.x = angle2 - Math.PI / 2;
+            scene.add(polarizer2Group);
+
+            // D. 光屏
+            const screenBackGeo = new THREE.BoxGeometry(0.2, 5.0, 5.0);
+            const screenBackMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.5, metalness: 0.3 });
+            const screenBack = new THREE.Mesh(screenBackGeo, screenBackMat);
+            screenBack.position.set(X_SCREEN + 0.1, 0, 0);
+            scene.add(screenBack);
+
+            // 荧光白投影面 (亮白亚光质感)
+            const screenFrontGeo = new THREE.PlaneGeometry(4.6, 4.6);
+            const screenFrontMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, side: THREE.DoubleSide, roughness: 0.9 });
+            screenObj = new THREE.Mesh(screenFrontGeo, screenFrontMat);
+            screenObj.rotation.y = -Math.PI / 2;
+            screenObj.position.set(X_SCREEN, 0, 0);
+            scene.add(screenObj);
+
+            // 亮光偏振投射斑
+            const spotGeo = new THREE.CircleGeometry(1.6, 32);
+            const spotMat = new THREE.MeshBasicMaterial({ 
+                color: 0xffffff, 
+                transparent: true, 
+                opacity: 0.8,
+                blending: THREE.NormalBlending, 
+                depthWrite: false,
+                side: THREE.DoubleSide
+            });
+            screenSpot = new THREE.Mesh(spotGeo, spotMat);
+            screenSpot.rotation.y = -Math.PI / 2;
+            screenSpot.position.set(X_SCREEN - 0.01, 0, 0);
+            scene.add(screenSpot);
+            screenSpotBack = screenSpot.clone();
+            screenSpotBack.position.set(X_SCREEN + 0.21, 0, 0);
+            scene.add(screenSpotBack);
+        }
+
+        // 构建镜框与栅格线
+        function createPolarizerDevice(label, mainColor) {
+            const group = new THREE.Group();
+
+            // 1. 外框
+            const frameGeo = new THREE.CylinderGeometry(2.2, 2.2, 0.25, 32);
+            frameGeo.rotateZ(Math.PI / 2);
+            const frameMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.9, roughness: 0.2 });
+            const frame = new THREE.Mesh(frameGeo, frameMat);
+            group.add(frame);
+
+            // 2. 介质滤层
+            const glassGeo = new THREE.CylinderGeometry(1.95, 1.95, 0.1, 32);
+            glassGeo.rotateZ(Math.PI / 2);
+            const glassMat = new THREE.MeshPhysicalMaterial({
+                color: mainColor,
+                transparent: true,
+                opacity: 0.2,
+                roughness: 0.2,
+                transmission: 0.8,
+                thickness: 0.3
+            });
+            const glass = new THREE.Mesh(glassGeo, glassMat);
+            group.add(glass);
+
+            // 3. 栅格线
+            const grateGroup = new THREE.Group();
+            const grateLineMat = new THREE.LineBasicMaterial({ 
+                color: 0xffffff, 
+                linewidth: 2.5,
+                transparent: true,
+                opacity: 0.95 
+            });
+
+            const R = 1.9;
+            const step = 0.35;
+            for (let yOffset = -R + 0.1; yOffset <= R - 0.1; yOffset += step) {
+                const halfLength = Math.sqrt(R*R - yOffset*yOffset);
+                const points = [
+                    new THREE.Vector3(0, yOffset, -halfLength),
+                    new THREE.Vector3(0, yOffset, halfLength)
+                ];
+                const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(lineGeo, grateLineMat);
+                grateGroup.add(line);
+            }
+            group.add(grateGroup);
+
+            // 4. 起偏指向红箭头
+            const arrowLength = 0.55;
+            const arrowDir = new THREE.Vector3(0, 1, 0); 
+            const arrowOrigin = new THREE.Vector3(0, 2.2, 0);
+            const arrowHelper = new THREE.ArrowHelper(arrowDir, arrowOrigin, arrowLength, 0xef4444, 0.18, 0.12);
+            group.add(arrowHelper);
+
+            const arrowHelperDown = new THREE.ArrowHelper(new THREE.Vector3(0,-1,0), new THREE.Vector3(0, -2.2, 0), arrowLength, 0xef4444, 0.18, 0.12);
+            group.add(arrowHelperDown);
+
+            return group;
+        }
+
+        // === 3. 重塑并初始化波动几何体 ===
+        function rebuildWaves() {
+            waveLines.forEach(line => scene.remove(line));
+            waveLines = [];
+            
+            longitudinalRings.forEach(ring => scene.remove(ring));
+            longitudinalRings = [];
+
+            if (laserBeamMesh) {
+                scene.remove(laserBeamMesh);
+                laserBeamMesh = null;
+            }
+
+            if (currentMode === 'mechanical') {
+                screenSpot.visible = false;
+                screenSpotBack.visible = false;
+                
+                if (mechWaveType === 'transverse') {
+                    const pointsCount = 200;
+                    const geo = new THREE.BufferGeometry();
+                    const positions = new Float32Array(pointsCount * 3);
+                    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                    
+                    const mat = new THREE.LineBasicMaterial({ 
+                        color: 0xea580c, 
+                        linewidth: 4 
+                    });
+                    const line = new THREE.Line(geo, mat);
+                    scene.add(line);
+                    waveLines.push(line);
+                } else {
+                    const ringCount = 52;
+                    const ringGeo = new THREE.TorusGeometry(0.78, 0.045, 8, 24);
+                    ringGeo.rotateY(Math.PI / 2);
+                    const ringMat = new THREE.MeshStandardMaterial({ 
+                        color: 0x4f46e5, 
+                        roughness: 0.2, 
+                        metalness: 0.8 
+                    });
+
+                    for (let i = 0; i < ringCount; i++) {
+                        const t = i / (ringCount - 1);
+                        const startX = X_MIN + t * (X_SCREEN - X_MIN);
+                        const mesh = new THREE.Mesh(ringGeo, ringMat);
+                        mesh.position.set(startX, 0, 0);
+                        scene.add(mesh);
+                        
+                        mesh.userData = { baseX: startX, phase: t * Math.PI * 8 };
+                        longitudinalRings.push(mesh);
+                    }
+                }
+            } else {
+                screenSpot.visible = true;
+                screenSpotBack.visible = true;
+
+                const laserGeo = new THREE.CylinderGeometry(1.6, 1.6, X_SCREEN - X_MIN, 16);
+                laserGeo.rotateZ(Math.PI / 2);
+                const laserMat = new THREE.MeshBasicMaterial({
+                    color: 0xbae6fd,
+                    transparent: true,
+                    opacity: 0.2,
+                    blending: THREE.NormalBlending,
+                    // 透明光束只是视觉外壳，不应遮挡内部电场波线。
+                    depthWrite: false
+                });
+                laserBeamMesh = new THREE.Mesh(laserGeo, laserMat);
+                laserBeamMesh.position.set((X_MIN + X_SCREEN) / 2, 0, 0);
+                scene.add(laserBeamMesh);
+
+                const createLightWaveSegment = (pointsCount, color, opacity, userData) => {
+                    const geo = new THREE.BufferGeometry();
+                    const positions = new Float32Array(pointsCount * 3);
+                    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+                    const mat = new THREE.LineBasicMaterial({ 
+                        color,
+                        transparent: true,
+                        opacity,
+                        linewidth: 3
+                    });
+                    const line = new THREE.Line(geo, mat);
+                    line.userData = userData;
+                    line.renderOrder = 2;
+                    scene.add(line);
+                    waveLines.push(line);
+                };
+
+                // 第一片前：等振幅波线按 0~360° 均匀铺开，表示自然光的全方向等强振动。
+                const numIncidentLines = naturalLightColors.length;
+                for (let i = 0; i < numIncidentLines; i++) {
+                    createLightWaveSegment(80, naturalLightColors[i], 0.52, {
+                        segment: 'incident',
+                        angle: (i * Math.PI * 2) / numIncidentLines
+                    });
+                }
+
+                // 第一片后：自然光已经成为单一方向的线偏振光，不能继续画成多分量叠加。
+                createLightWaveSegment(80, 0x0284c7, 0.98, { segment: 'afterFirst' });
+                createLightWaveSegment(80, 0x0284c7, 0.98, { segment: 'afterSecond' });
+            }
+        }
+
+        // === 4. 每帧动态计算波振动并在 3D 中更新 ===
+        function updatePhysics(advanceTime = false) {
+            if (advanceTime && isPlaying) time += 0.01 * speed;
+            const state = getPhysicalState();
+            const totalPoints = 200;
+
+            if (currentMode === 'mechanical') {
+                if (mechWaveType === 'transverse') {
+                    const line = waveLines[0];
+                    const positions = line.geometry.attributes.position.array;
+
+                    for (let i = 0; i < totalPoints; i++) {
+                        const t = i / (totalPoints - 1);
+                        const x = X_MIN + t * (X_SCREEN - X_MIN);
+
+                        let y = 0;
+                        let z = 0;
+
+                        if (x < X_SLIT1) {
+                            // 入射绳波与第一道狭缝同向。角度定义与器件红色透振箭头保持一致：
+                            // 90° 对应 y 轴竖直方向，0° 对应 z 轴方向。
+                            const wave = amp * Math.sin(freq * x - time);
+                            y = wave * Math.sin(angle1);
+                            z = -wave * Math.cos(angle1);
+                        } 
+                        else if (x >= X_SLIT1 && x < X_SLIT2) {
+                            const wave = amp * Math.sin(freq * x - time);
+                            y = wave * Math.sin(angle1);
+                            z = -wave * Math.cos(angle1);
+                        } 
+                        else {
+                            const projAmp = amp * state.signedProjection;
+                            const wave = projAmp * Math.sin(freq * x - time);
+                            y = wave * Math.sin(angle2);
+                            z = -wave * Math.cos(angle2);
+                        }
+
+                        positions[i * 3] = x;
+                        positions[i * 3 + 1] = y;
+                        positions[i * 3 + 2] = z;
+                    }
+                    line.geometry.attributes.position.needsUpdate = true;
+
+
+                } else {
+                    for (let i = 0; i < longitudinalRings.length; i++) {
+                        const ring = longitudinalRings[i];
+                        const baseX = ring.userData.baseX;
+                        const displacement = (amp * 0.45) * Math.sin(freq * baseX - time);
+                        // 纵波的质点沿传播方向 x 振动；相邻线圈间距随时间改变，形成可见的压缩区和稀疏区。
+                        ring.position.x = baseX + displacement;
+                        const scale = 0.78 + 0.22 * Math.cos(freq * baseX - time);
+                        ring.scale.set(scale, 1, scale);
+                    }
+                }
+            } else {
+                for (const line of waveLines) {
+                    const positions = line.geometry.attributes.position.array;
+                    const pointsCount = line.geometry.attributes.position.count;
+                    const segment = line.userData.segment;
+
+                    for (let i = 0; i < pointsCount; i++) {
+                        const t = i / (pointsCount - 1);
+                        let x;
+                        let wave;
+
+                        let y = 0;
+                        let z = 0;
+
+                        if (segment === 'incident') {
+                            x = X_MIN + t * (X_SLIT1 - X_MIN);
+                            wave = amp * Math.sin(freq * x - time);
+                            y = wave * Math.sin(line.userData.angle);
+                            z = -wave * Math.cos(line.userData.angle);
+                        } else if (segment === 'afterFirst') {
+                            x = X_SLIT1 + t * (X_SLIT2 - X_SLIT1);
+                            // 第一片后的光强为入射自然光的一半，对应电场振幅为 1/sqrt(2)。
+                            wave = amp * Math.SQRT1_2 * Math.sin(freq * x - time);
+                            y = wave * Math.sin(angle1);
+                            z = -wave * Math.cos(angle1);
+                        } else {
+                            x = X_SLIT2 + t * (X_SCREEN - X_SLIT2);
+                            const analyserProjection = state.signedProjection;
+                            wave = amp * Math.SQRT1_2 * analyserProjection * Math.sin(freq * x - time);
+                            y = wave * Math.sin(angle2);
+                            z = -wave * Math.cos(angle2);
+                        }
+
+                        positions[i * 3] = x;
+                        positions[i * 3 + 1] = y;
+                        positions[i * 3 + 2] = z;
+                    }
+                    line.geometry.attributes.position.needsUpdate = true;
+
+                    // 完全消光时不绘制传播轴上的“零振幅直线”，避免被误认为仍有光通过。
+                    if (segment === 'afterSecond') {
+                        line.material.opacity = state.projectionRatio * 0.98;
+                    }
+                }
+
+            }
+            updateUIIntensity(state);
+        }
+
+        // 所有指标、光斑和状态文字都读取同一物理状态；暂停仅冻结动画时间。
+        function updateUIIntensity(state = getPhysicalState()) {
+            const isLight = state.mode === 'light';
+            const stateEl = document.getElementById('state-tag');
+            document.getElementById('light-metrics').classList.toggle('hidden', !isLight);
+            document.getElementById('mechanical-metric').classList.toggle('hidden', isLight);
+            document.getElementById('intensity-meter').classList.toggle('hidden', !isLight);
+            document.getElementById('angle-label').innerText = isLight ? '两透振轴夹角 θ:' : '类比允许方向夹角 θ:';
+            let suffix = '';
+            if (state.theta === 0) suffix = isLight ? ' (透振轴平行)' : ' (允许方向平行)';
+            if (state.theta === 90) suffix = isLight ? ' (透振轴垂直)' : ' (允许方向垂直)';
+            document.getElementById('relative-angle').innerText = `${state.theta}°${suffix}`;
+            const ratio = isLight ? state.i2 : state.amplitudeRatio;
+            document.getElementById('intensity-label').innerText = isLight ? '相对入射光强 I₂/I₀:' : '机械类比相对振幅 A/A₀:';
+            document.getElementById('intensity-text').innerText = formatRatio(ratio);
+            document.getElementById('intensity-bar').style.width = `${ratio * 100}%`;
+            document.getElementById('amplitude-ratio-text').innerText = formatRatio(state.amplitudeRatio);
+            document.getElementById('model-assumption-tag').innerText = isLight
+                ? '理想偏振片模型：忽略吸收、反射和漏光'
+                : state.waveType === 'longitudinal'
+                    ? '机械纵波方向类比：振动沿传播方向；此模型不模拟器件的实际机械阻挡或损耗'
+                    : '机械横波方向类比：A/A₀ = |cosθ|，仅模拟振动分量投影';
+            document.getElementById('direction-legend').innerText = isLight
+                ? 'k 传播方向　E 电场振动方向'
+                : state.waveType === 'longitudinal' ? 'k 传播方向　质点振动与 k 共线' : 'k 传播方向　绳波振动与 k 垂直';
+            document.getElementById('axis-legend').innerText = isLight
+                ? 'P/A 起偏/检偏透振轴　颜色仅区分方向'
+                : '允许方向 1/2：机械类比示意，不是真实偏振片';
+            let label, color;
+            if (isLight) {
+                document.getElementById('i1-ratio-text').innerText = formatRatio(state.i1);
+                document.getElementById('i2-ratio-text').innerText = formatRatio(state.i2);
+                document.getElementById('i2-i1-ratio-text').innerText = formatRatio(state.i2OverI1);
+                if (state.i2OverI1 === 0) { label = '完全消光 (理想模型)'; color = 'slate'; }
+                else if (state.i2OverI1 === 1) { label = '最大透过：入射光的50%'; color = 'emerald'; }
+                else { label = state.i2OverI1 < 0.05 ? '弱透光：仍有非零输出' : '部分透光'; color = 'amber'; }
+                screenSpot.material.opacity = state.i2OverI1 * 0.9;
+                screenSpot.scale.setScalar(1);
+            } else if (state.waveType === 'longitudinal') {
+                label = '纵波类比：方向不改变输出'; color = 'emerald';
+            } else if (state.amplitudeRatio === 0) {
+                label = '类比阻断：方向投影为零'; color = 'rose';
+            } else if (state.amplitudeRatio === 1) {
+                label = '平行：投影振幅不变'; color = 'emerald';
+            } else {
+                label = '部分振动分量投影'; color = 'amber';
+            }
+            stateEl.className = `text-[10px] font-bold px-2 py-0.5 rounded bg-${color}-50 text-${color}-600 border border-${color}-200`;
+            stateEl.innerText = label;
+        }
+
+
+        // === 6. 参数更新与统一物理状态 ===
+        function updateParams() {
+            const sliderId = currentMode === 'mechanical' ? 'slider-slit2' : 'slider-pol2';
+            const valId = currentMode === 'mechanical' ? 'slit2-val' : 'pol2-val';
+            const degrees = Number(document.getElementById(sliderId).value);
+            angle2 = degrees * Math.PI / 180;
+            document.getElementById(valId).innerText = `${degrees}°`;
+            polarizer2Group.rotation.x = angle2 - Math.PI / 2;
+            updatePhysics(); // 暂停时也立即刷新当前参数对应的波形和数值。
+            drawTheoryCurve();
+            updateScientificAnnotations();
+        }
+
+        function getPhysicalState(thetaDeg = null, mode = currentMode, waveType = mechWaveType) {
+            const raw = Math.cos(thetaDeg === null ? angle2 - angle1 : thetaDeg * Math.PI / 180);
+            const signedProjection = Math.abs(raw) < OUTPUT_EPSILON ? 0
+                : Math.abs(Math.abs(raw) - 1) < OUTPUT_EPSILON ? Math.sign(raw) : raw;
+            const projectionRatio = Math.abs(signedProjection);
+            const difference = thetaDeg === null ? Math.abs(angle2 - angle1) * 180 / Math.PI : Math.abs(thetaDeg);
+            const modulo = difference % 180;
+            const theta = Number(Math.min(modulo, 180 - modulo).toFixed(6));
+            const amplitudeRatio = mode === 'mechanical' && waveType === 'longitudinal' ? 1 : projectionRatio;
+            const i2OverI1 = mode === 'light' ? projectionRatio ** 2 : null;
+            return {mode, waveType, theta, signedProjection, projectionRatio, amplitudeRatio,
+                i1: mode === 'light' ? 0.5 : null, i2: mode === 'light' ? 0.5 * i2OverI1 : null, i2OverI1};
+        }
+
+        function formatRatio(value) {
+            return `${Number((value * 100).toFixed(2))}%`;
+        }
+
+        function calculateLightState(thetaDeg) {
+            return getPhysicalState(thetaDeg, 'light');
+        }
+
+        // === 7. 演示模式切换和参数清空 ===
+        function switchMode(mode) {
+            const targetTask = mode === 'mechanical' ? 'A' : 'B';
+            if (appReady && activeTask !== targetTask && !(activeTask === 'C' && mode === 'light')) {
+                startTask(targetTask);
+                return;
+            }
+            if (currentMode === mode) return;
+            currentMode = mode;
+            document.body.dataset.experimentMode = mode;
+
+            const btnMech = document.getElementById('btn-mode-mech');
+            const btnLight = document.getElementById('btn-mode-light');
+            const panelMech = document.getElementById('mech-controls');
+            const panelLight = document.getElementById('light-controls');
+            const demoMech = document.getElementById('quick-demos-mech');
+            const demoLight = document.getElementById('quick-demos-light');
+            const examplesPanel = document.getElementById('polarization-examples');
+            
+            const badge = document.getElementById('knowledge-badge');
+            const kText = document.getElementById('knowledge-text');
+
+            if (mode === 'mechanical') {
+                btnMech.className = "py-3 px-4 rounded-lg font-semibold transition duration-200 border text-center flex flex-col items-center justify-center gap-1 bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm";
+                btnLight.className = "py-3 px-4 rounded-lg font-semibold transition duration-200 border text-center flex flex-col items-center justify-center gap-1 bg-slate-100 border-slate-200 text-slate-500 hover:text-slate-800";
+                
+                panelMech.classList.remove('hidden');
+                panelLight.classList.add('hidden');
+                if (examplesPanel) examplesPanel.classList.add('hidden');
+                
+                demoMech.classList.remove('hidden');
+                demoLight.classList.add('hidden');
+
+                badge.innerText = "机械波类比";
+                badge.className = "px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-semibold";
+
+                kText.innerHTML = `
+                    <p><strong>横波偏振：</strong> 绳波振动方向垂直于传播方向。当绳波振动方向与狭缝平行时，波能通过；当振动方向与狭缝垂直时，波被阻挡。这种波的振动方向分布不均匀的现象称为<strong>偏振</strong>。</p>
+                    <p><strong>纵波类比：</strong> 弹簧纵波的振动方向与传播方向共线，旋转允许方向不会产生与横波相同的方向选择性。这里是帮助理解的机械类比。</p>
+                `;
+
+                document.getElementById('slider-slit2').value = 90;
+                document.querySelectorAll('.demo-preset').forEach(button => {
+                    if (button.dataset.preset && button.dataset.preset.startsWith('light-')) button.classList.remove('bg-sky-50', 'border-sky-200', 'text-sky-700');
+                });
+            } else {
+                btnLight.className = "py-3 px-4 rounded-lg font-semibold transition duration-200 border text-center flex flex-col items-center justify-center gap-1 bg-sky-50 border-sky-200 text-sky-700 shadow-sm";
+                btnMech.className = "py-3 px-4 rounded-lg font-semibold transition duration-200 border text-center flex flex-col items-center justify-center gap-1 bg-slate-100 border-slate-200 text-slate-500 hover:text-slate-800";
+                
+                panelMech.classList.add('hidden');
+                panelLight.classList.remove('hidden');
+                if (examplesPanel) examplesPanel.classList.remove('hidden');
+
+                demoMech.classList.add('hidden');
+                demoLight.classList.remove('hidden');
+
+                badge.innerText = "光波（电磁波）";
+                badge.className = "px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 font-semibold";
+
+                kText.innerHTML = `
+                    <p><strong>自然光：</strong> 普通光源发出的光，在垂直于传播方向的平面内，各个方向的振动分量都有且平均强度相同。画面以 36 个等间隔方向近似这种连续、各向均匀的分布。</p>
+                    <p><strong>偏振镜片：</strong> 内部具有特定取向的结构，只允许沿透振方向的电场分量通过。理想自然光通过第一片后，光强变为入射光的一半。</p>
+                    <p><strong>光的电磁横波：</strong> 改变检偏片角度，光屏亮度从最大（入射光的约50%）变化到完全消光。偏振是横波的专属证明，该实验有力判定：<strong>光具有偏振特性，且光是横波。</strong></p>
+                `;
+
+                document.getElementById('slider-pol2').value = 90;
+            }
+
+            rebuildWaves();
+            updateParams();
+            updateExplorationAccess();
+        }
+
+        function setMechWaveType(type) {
+            if (appReady && !canExploreTask()) return;
+            if (mechWaveType === type) {
+                drawTheoryCurve();
+                return;
+            }
+            mechWaveType = type;
+
+            const btnTrans = document.getElementById('btn-wave-trans');
+            const btnLong = document.getElementById('btn-wave-long');
+
+            if (type === 'transverse') {
+                btnTrans.className = "py-2 px-3 rounded text-xs font-bold border bg-indigo-100 border-indigo-300 text-indigo-700 transition";
+                btnLong.className = "py-2 px-3 rounded text-xs font-bold border bg-white border-slate-200 text-slate-500 hover:text-slate-800 transition";
+            } else {
+                btnLong.className = "py-2 px-3 rounded text-xs font-bold border bg-indigo-100 border-indigo-300 text-indigo-700 transition";
+                btnTrans.className = "py-2 px-3 rounded text-xs font-bold border bg-white border-slate-200 text-slate-500 hover:text-slate-800 transition";
+            }
+            rebuildWaves();
+            updateParams();
+        }
+
+        function updatePresetSelection(presetKey) {
+            document.querySelectorAll('.demo-preset').forEach(button => {
+                const selected = button.dataset.preset === presetKey;
+                button.classList.toggle('bg-indigo-50', selected && currentMode === 'mechanical');
+                button.classList.toggle('border-indigo-200', selected && currentMode === 'mechanical');
+                button.classList.toggle('text-indigo-700', selected && currentMode === 'mechanical');
+                button.classList.toggle('bg-sky-50', selected && currentMode === 'light');
+                button.classList.toggle('border-sky-200', selected && currentMode === 'light');
+                button.classList.toggle('text-sky-700', selected && currentMode === 'light');
+                button.classList.toggle('bg-slate-100', !selected);
+                button.classList.toggle('border-slate-200', !selected);
+                button.classList.toggle('text-slate-700', !selected);
+            });
+        }
+
+        function applyPreset(presetKey) {
+            if (!canExploreTask()) return;
+            switch(presetKey) {
+                case 'mech-trans-aligned':
+                    setMechWaveType('transverse');
+                    document.getElementById('slider-slit2').value = 90;
+                    break;
+                case 'mech-trans-crossed':
+                    setMechWaveType('transverse');
+                    document.getElementById('slider-slit2').value = 0;
+                    break;
+                case 'mech-long-aligned':
+                    setMechWaveType('longitudinal');
+                    document.getElementById('slider-slit2').value = 0;
+                    break;
+                case 'mech-long-parallel':
+                    setMechWaveType('longitudinal');
+                    document.getElementById('slider-slit2').value = 90;
+                    break;
+                case 'light-parallel':
+                    document.getElementById('slider-pol2').value = 90;
+                    break;
+                case 'light-crossed':
+                    document.getElementById('slider-pol2').value = 0;
+                    break;
+                case 'light-45':
+                    document.getElementById('slider-pol2').value = 45;
+                    break;
+                case 'light-30':
+                    document.getElementById('slider-pol2').value = 60;
+                    break;
+                case 'light-60':
+                    document.getElementById('slider-pol2').value = 150;
+                    break;
+            }
+            updateParams();
+            updatePresetSelection(presetKey);
+            updateCurveSummary();
+            recordMeasurement('预设场景');
+        }
+
+
+        function recordMeasurement(source = '手动记录') {
+            if (!canExploreTask()) return;
+            const state = getPhysicalState();
+            const theoretical = getPhysicalState(state.theta, state.mode, state.waveType);
+            const item = {
+                time: new Date().toISOString(), task: activeTask, mode: state.mode,
+                waveType: state.waveType, angle: state.theta, amplitudeRatio: state.amplitudeRatio,
+                intensityRatio: state.i2, source, i1Ratio: state.i1, i2Ratio: state.i2, i2OverI1: state.i2OverI1,
+                prediction: getTaskPrediction(), predictions: taskPredictions[activeTask] ? {...taskPredictions[activeTask]} : null,
+                conclusion: taskConclusions[activeTask] || '',
+                applicationScenario: activeTask === 'C' ? applicationScenario : null,
+                theoreticalRatio: state.mode === 'light' ? theoretical.i2 : theoretical.amplitudeRatio,
+                errorPercent: Math.abs((state.mode === 'light' ? state.i2 : state.amplitudeRatio) -
+                    (state.mode === 'light' ? theoretical.i2 : theoretical.amplitudeRatio)) * 100
+            };
+            measurementLog.push(item);
+            const progress = taskProgress[activeTask];
+            if (activeTask === 'C' && state.mode === 'light') {
+                const answer = applicationAnswers[applicationScenario];
+                answer.observed = true;
+                answer.observation = item;
+            } else if (progress.predicted && state.mode === taskDefinitions[activeTask].mode) {
+                const key = activeTask === 'A' ? `${state.waveType}-${state.theta}` : `light-${state.theta}`;
+                if (taskDefinitions[activeTask].observations.some(observation => observation.key === key)) {
+                    progress.observations[key] = item;
+                }
+                progress.measured = taskDefinitions[activeTask].observations.every(observation => progress.observations[observation.key]);
+            }
+            // 记录永远不替代解释，也不清除已提交的结论。
+            document.getElementById('measurement-count').innerText = `${measurementLog.length} 条记录`;
+            document.getElementById('last-measurement').innerText = state.mode === 'light'
+                ? `θ=${state.theta}°，I₂/I₀=${formatRatio(state.i2)}，模型数值差=${item.errorPercent.toFixed(2)}个百分点`
+                : `${state.waveType === 'longitudinal' ? '纵波' : '横波'}，夹角=${state.theta}°，A/A₀=${formatRatio(state.amplitudeRatio)}，模型数值差=${item.errorPercent.toFixed(2)}个百分点`;
+            updateCurveSummary();
+            updateTaskProgressUI();
+            return item;
+        }
+
+        function clearMeasurements() {
+            measurementLog = [];
+            ['A', 'B'].forEach(task => {
+                taskProgress[task].observations = {};
+                taskProgress[task].measured = false;
+            });
+            Object.values(applicationAnswers).forEach(answer => {
+                answer.observed = false;
+                answer.observation = null;
+            });
+            document.getElementById('measurement-count').innerText = '0 条记录';
+            document.getElementById('last-measurement').innerText = '尚未记录';
+            updateCurveSummary();
+            updateTaskProgressUI();
+        }
+
+        function updateCurveSummary() {
+            const summary = document.getElementById('curve-summary');
+            if (!summary) return;
+            if (!measurementLog.length) {
+                summary.innerText = '记录数据后生成理论关系摘要。';
+            } else if (currentMode === 'light') {
+                const errors = measurementLog.filter(item => item.mode === 'light').map(item => item.errorPercent);
+                const avg = errors.length ? errors.reduce((a, b) => a + b, 0) / errors.length : 0;
+                summary.innerText = `理论关系：I₂/I₀ = 50% × cos²θ；已记录 ${errors.length} 个状态点，平均模型数值差 ${avg.toFixed(2)}个百分点。`;
+            } else {
+                const errors = measurementLog.filter(item => item.mode === 'mechanical' && item.waveType === mechWaveType).map(item => item.errorPercent);
+                const avg = errors.length ? errors.reduce((a, b) => a + b, 0) / errors.length : 0;
+                summary.innerText = `类比关系：${mechWaveType === 'longitudinal' ? '纵波 A/A₀ = 100%（方向不改变输出）' : '横波 A/A₀ = |cosθ|'}；已记录 ${errors.length} 个状态点，平均模型数值差 ${avg.toFixed(2)}个百分点。`;
+            }
+            drawTheoryCurve();
+        }
+
+        function drawTheoryCurve() {
+            const canvas = document.getElementById('curve-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const w = Math.max(280, Math.floor(canvas.clientWidth || 520));
+            const h = 180;
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            const pixelWidth = Math.round(w * dpr);
+            const pixelHeight = Math.round(h * dpr);
+            if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+                canvas.width = pixelWidth;
+                canvas.height = pixelHeight;
+            }
+            canvas.style.height = `${h}px`;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            const pad = {left: 52, right: 16, top: 24, bottom: 32};
+            ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#f8fafc'; ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(pad.left,pad.top); ctx.lineTo(pad.left,h-pad.bottom); ctx.lineTo(w-pad.right,h-pad.bottom); ctx.stroke();
+            ctx.font = '12px Arial, sans-serif'; ctx.fillStyle = '#64748b';
+            ctx.textAlign = 'left';
+            ctx.fillText(currentMode === 'light' ? 'I₂/I₀' : 'A/A₀', 8, 16);
+            ctx.textAlign = 'right';
+            ctx.fillText('0%', pad.left - 8, h - pad.bottom + 4);
+            ctx.fillText(currentMode === 'light' ? '50%' : '100%', pad.left - 8, pad.top + 4);
+            ctx.textAlign = 'center';
+            ctx.fillText('0°', pad.left, h - 10); ctx.fillText('45°', (pad.left+w-pad.right)/2, h-10); ctx.fillText('90°', w-pad.right, h-10);
+            if (currentMode === 'light') {
+                ctx.setLineDash([3, 3]); ctx.strokeStyle = '#bae6fd'; ctx.lineWidth = 1;
+                [0, 45, 90].forEach(deg => { const x = pad.left + (deg / 90) * (w - pad.left - pad.right); ctx.beginPath(); ctx.moveTo(x, pad.top); ctx.lineTo(x, h - pad.bottom); ctx.stroke(); });
+                ctx.setLineDash([]);
+            }
+            ctx.beginPath(); ctx.strokeStyle = currentMode === 'light' ? '#0284c7' : '#4f46e5'; ctx.lineWidth = 2;
+            for (let i=0;i<=90;i++) { const state=getPhysicalState(i); const value=currentMode === 'light' ? state.i2 : state.amplitudeRatio; const x=pad.left+(i/90)*(w-pad.left-pad.right); const max=currentMode === 'light' ? 0.5 : 1; const y=(h-pad.bottom)-(value/max)*(h-pad.top-pad.bottom); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
+            ctx.stroke();
+            for (const item of measurementLog.filter(item => item.mode === currentMode && (currentMode === 'light' || item.waveType === mechWaveType))) { const x=pad.left+(item.angle/90)*(w-pad.left-pad.right); const value=currentMode === 'light' ? item.intensityRatio : item.amplitudeRatio; const max=currentMode === 'light' ? 0.5 : 1; const y=(h-pad.bottom)-(value/max)*(h-pad.top-pad.bottom); ctx.beginPath(); ctx.fillStyle='#ef4444'; ctx.arc(x,y,3.5,0,Math.PI*2); ctx.fill(); }
+        }
+
+
+        const taskDefinitions = {
+            A: {
+                title: 'A 横波方向类比', mode: 'mechanical',
+                text: '预测横波0°与90°的振幅，再记录横波和纵波各自的平行、垂直状态进行对照。',
+                predictions: {
+                    first: {label: '预测1：横波允许方向平行（θ=0°），A/A₀？', options: ['100%', '50%', '0%'], expected: '100%', theta: 0},
+                    second: {label: '预测2：横波允许方向垂直（θ=90°），A/A₀？', options: ['100%', '50%', '0%'], expected: '0%', theta: 90}
+                },
+                observations: [
+                    {key: 'transverse-0', label: '横波0°'}, {key: 'transverse-90', label: '横波90°'},
+                    {key: 'longitudinal-0', label: '纵波0°'}, {key: 'longitudinal-90', label: '纵波90°'}
+                ],
+                conclusions: ['横波有明确振动方向，投影随夹角变化', '纵波也呈现同样方向选择性'],
+                reference: '横波振动垂直于传播方向，允许方向改变会改变振幅投影；纵波振动沿传播方向，此类比中旋转允许方向不改变输出。机械类比不能代替真实器件的动力学模型。'
+            },
+            B: {
+                title: 'B 起偏与检偏', mode: 'light',
+                text: '预测两透振轴夹角45°和90°的光强，再记录0°、45°、90°三个状态；30°与60°可选。',
+                predictions: {
+                    first: {label: '预测1：θ=45°，检偏后 I₂/I₀？', options: ['50%', '25%', '0%'], expected: '25%', theta: 45},
+                    second: {label: '预测2：θ=90°，检偏后 I₂/I₀？', options: ['50%', '25%', '0%'], expected: '0%', theta: 90}
+                },
+                observations: [{key: 'light-0', label: '0°'}, {key: 'light-45', label: '45°'}, {key: 'light-90', label: '90°'}],
+                conclusions: ['I₂/I₀随夹角增大按cos²θ减弱', '夹角变化不影响光强'],
+                reference: '自然光经起偏器后 I₁/I₀=50%；在0°—90°范围，I₂/I₀=50%×cos²θ，由50%减至0%，45°时为25%。'
+            }
+        };
+
+        const applicationDefinitions = {
+            glare: {
+                title: '偏振太阳镜防眩光', example: 'camera',
+                prompt: '观察偏振镜头实例。反射眩光为什么可能被偏振镜减弱？哪些反射条件会影响效果？',
+                reasons: [
+                    {value: 'selective', text: '反射光可能部分偏振，偏振镜选择透过分量以减弱眩光'},
+                    {value: 'all-zero', text: '所有反射光都能被任何方向的偏振镜完全消除'}
+                ],
+                expected: 'selective',
+                reference: '介质表面的反射光常具有一定偏振成分；在合适的观察和镜片方向下，偏振镜可削弱主要眩光分量。偏振程度受入射角、材料等影响，不能保证所有反射光完全消失。',
+                boundary: '上方两片偏振片仅类比方向选择，未模拟反射面或真实太阳镜。'
+            },
+            lcd: {
+                title: '液晶显示', example: 'lcd',
+                prompt: '观察液晶屏幕实例。液晶层和偏振片怎样共同控制像素亮暗？',
+                reasons: [
+                    {value: 'alignment', text: '电压改变液晶排列和偏振状态，偏振片组合将其转换为亮度变化'},
+                    {value: 'self-light', text: '液晶本身发光，亮度变化与偏振片无关'}
+                ],
+                expected: 'alignment',
+                reference: '以常见透射式液晶显示为例，电压改变液晶分子排列，影响通过光的偏振状态；前后偏振片把这种变化转换成透过光强变化。液晶层通常不自行发光，具体机制取决于显示模式。',
+                boundary: '上方模型不含液晶层，旋转检偏器只是透过率的类比，不能等同于施加液晶驱动电压。'
+            },
+            stereo: {
+                title: '偏振式3D眼镜', example: '3d',
+                prompt: '观察3D电影实例。左右眼怎样接收各自画面？解释线偏振示意与实际影院的区别。',
+                reasons: [
+                    {value: 'channels', text: '不同偏振编码对应左右画面，镜片分别选择相应通道'},
+                    {value: 'same-image', text: '左右镜片透过同一画面，仅靠变暗就产生双眼视差'}
+                ],
+                expected: 'channels',
+                reference: '两幅不同视点的画面用不同偏振状态编码，左右镜片分别选择对应通道，使双眼接收不同画面。示意图使用正交线偏振；实际影院也可能使用圆偏振，不能把所有方案都概括为两轴垂直。',
+                boundary: '上方模型只有一条光路，不含左右眼双通道或完整立体成像。'
+            }
+        };
+
+        function getTaskPrediction(task = activeTask) {
+            const predictions = taskPredictions[task];
+            if (!predictions) return null;
+            return Object.entries(predictions).map(([key, answer]) =>
+                `${taskDefinitions[task].predictions[key].theta}°：${answer || '未提交'}`).join('；');
+        }
+
+        function canExploreTask() {
+            return learningMode === 'teacher' || activeTask === 'C' || taskProgress[activeTask].predicted;
+        }
+
+        function setLearningMode(mode) {
+            learningMode = mode === 'teacher' ? 'teacher' : 'student';
+            updateExplorationAccess();
+        }
+
+        function updateExplorationAccess() {
+            const allowed = canExploreTask();
+            document.querySelectorAll('#slider-slit2, #slider-pol2, #btn-wave-trans, #btn-wave-long, #check-autorotate, .demo-preset, button[onclick="recordMeasurement()"]').forEach(control => {
+                control.disabled = !allowed;
+            });
+            if (!allowed) {
+                autoRotateActive = false;
+                document.getElementById('check-autorotate').checked = false;
+            }
+            document.getElementById('exploration-access').innerText = learningMode === 'teacher'
+                ? '教师可自由演示；任务评价仍需预测、关键观察与结论提交。'
+                : activeTask === 'C' ? '选择情境 → 查看实例并记录类比状态 → 提交解释与原理依据。'
+                : allowed ? '两个首次预测已锁定，实验操作已解锁；预测错误也可以继续探究。'
+                : '请分别完成两个预测，再调节参数或使用预设。可切换教师演示自由操作。';
+        }
+
+        function submitPrediction(answer, predictionKey = 'first') {
+            const definition = taskDefinitions[activeTask];
+            const predictions = taskPredictions[activeTask];
+            if (!definition || !definition.predictions[predictionKey] ||
+                !definition.predictions[predictionKey].options.includes(answer) || predictions[predictionKey] !== null) return;
+            predictions[predictionKey] = answer;
+            taskProgress[activeTask].predicted = Object.values(predictions).every(value => value !== null);
+            updateTaskProgressUI();
+            updateExplorationAccess();
+        }
+
+        function updatePredictionUI() {
+            const definition = taskDefinitions[activeTask];
+            if (!definition) return;
+            const predictions = taskPredictions[activeTask];
+            document.querySelectorAll('.prediction-option').forEach(button => {
+                const answer = predictions[button.dataset.prediction];
+                button.disabled = answer !== null;
+                button.classList.toggle('ring-2', button.dataset.answer === answer);
+                button.classList.toggle('ring-sky-400', button.dataset.answer === answer);
+                button.classList.toggle('bg-sky-50', button.dataset.answer === answer);
+                button.setAttribute('aria-pressed', String(button.dataset.answer === answer));
+            });
+            const feedback = document.getElementById('prediction-feedback');
+            if (feedback) {
+                const progress = taskProgress[activeTask];
+                feedback.innerText = !progress.predicted
+                    ? `首次预测：${getTaskPrediction()}。两道题分别锁定，请完成未选的预测。`
+                    : progress.measured
+                        ? Object.entries(definition.predictions).map(([key, item]) =>
+                            `${item.theta}°预测${predictions[key]}，模型结果${item.expected}${predictions[key] === item.expected ? '（一致）' : '（请对照修正理解，首次预测保留）'}`).join('；')
+                        : `首次预测已锁定：${getTaskPrediction()}。请记录全部关键状态，再核对预测。`;
+                feedback.className = 'mt-2 text-sm text-slate-600';
+            }
+        }
+
+        function submitTaskConclusion(task, value) {
+            const definition = taskDefinitions[task];
+            if (task !== activeTask || !definition || !definition.conclusions.includes(value)) return;
+            const progress = taskProgress[task];
+            if (!progress.predicted || !progress.measured) return;
+            taskConclusions[task] = value;
+            progress.explained = true;
+            progress.correct = value === definition.conclusions[0];
+            progress.reviews.push({time: new Date().toISOString(), conclusion: value, correct: progress.correct});
+            measurementLog.filter(item => item.task === task && item.predictions?.first && item.predictions?.second).forEach(item => {
+                item.conclusion = value;
+                item.explanationCorrect = progress.correct;
+            });
+            updateTaskProgressUI();
+        }
+
+        function taskScore(task) {
+            const definition = taskDefinitions[task];
+            const progress = taskProgress[task];
+            const predictionScore = Object.entries(definition.predictions).reduce((score, [key, item]) =>
+                score + (taskPredictions[task][key] === item.expected ? 20 : 0), 0);
+            return predictionScore + (progress.measured ? 30 : 0) + (progress.correct ? 30 : 0);
+        }
+
+
+        function escapeReportText(value) {
+            return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+        }
+
+        function printExperimentReport() {
+            const state = getPhysicalState();
+            const modeLabel = state.mode === 'light' ? '光学' : state.waveType === 'longitudinal' ? '机械纵波类比' : '机械横波类比';
+            const ratio = formatRatio(state.mode === 'light' ? state.i2 : state.amplitudeRatio);
+            const model = state.mode === 'light'
+                ? '理想偏振片：I₁/I₀=50%，I₂/I₀=50%×cos²θ，忽略吸收、反射和漏光。'
+                : state.waveType === 'longitudinal'
+                    ? '纵波类比：A/A₀=100%，振动与传播方向共线，旋转示意方向不改变输出；不模拟真实器件的机械阻挡或损耗。'
+                    : '横波类比：A/A₀=|cosθ|，仅用于展示振动方向投影，不等同于真实偏振片。';
+            const validationText = [0, 30, 45, 60, 90].map(theta => getPhysicalState(theta)).map(item =>
+                `${item.theta}°：${state.mode === 'light' ? 'I₂/I₀' : 'A/A₀'}=${formatRatio(state.mode === 'light' ? item.i2 : item.amplitudeRatio)}`).join('；');
+            const rows = measurementLog.map(item => `<tr><td>${item.task}</td><td>${item.mode === 'light' ? '光学' : '机械类比'}</td><td>${item.mode === 'light' ? '-' : item.waveType === 'longitudinal' ? '纵波' : '横波'}</td><td>${item.angle}°</td><td>${item.mode === 'mechanical' ? formatRatio(item.amplitudeRatio) : '-'}</td><td>${item.i1Ratio == null ? '-' : formatRatio(item.i1Ratio)}</td><td>${item.i2Ratio == null ? '-' : formatRatio(item.i2Ratio)}</td><td>${item.i2OverI1 == null ? '-' : formatRatio(item.i2OverI1)}</td><td>${item.errorPercent.toFixed(2)}</td><td>${escapeReportText(item.prediction || '-')}</td><td>${escapeReportText(item.conclusion || '-')}</td></tr>`).join('');
+            const feedback = activeTask === 'C'
+                ? taskProgress.C.explained ? `原理依据${taskProgress.C.correct ? '匹配' : '需修正'}；文字说明未自动逐句判分。` : '情境解释未提交。'
+                : taskProgress[activeTask].explained ? `学习得分 ${taskScore(activeTask)}/100；结论${taskProgress[activeTask].correct ? '正确' : '待修正'}。` : '结论未提交。';
+            const report = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>偏振探究实验报告</title><style>body{font-family:Arial,"Microsoft YaHei";max-width:1100px;margin:40px auto;line-height:1.7;color:#1f2937}h1{color:#0f4c81}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #cbd5e1;padding:7px;text-align:left}th{background:#eaf2fb}.meta{color:#64748b}</style>
+                <h1>偏振探究实验报告</h1><p class="meta">版本 v1.1.0 | 任务 ${activeTask} | 生成时间 ${new Date().toLocaleString()}</p>
+                <h2>学习目标</h2><p>通过预测、调节、记录和解释，理解横波方向性与偏振现象的关系。</p>
+                <h2>当前结论</h2><p>${modeLabel}；夹角 θ=${state.theta}°；${state.mode === 'light' ? 'I₂/I₀' : 'A/A₀'}=${ratio}。</p>
+                <h2>模型假设</h2><p>${model}</p><h2>关键角度模型核对</h2><p>${validationText}</p>
+                <h2>预测与解释</h2><p>首次预测：${escapeReportText(getTaskPrediction() || '本任务无需数值预测')}。</p><p>结论：${escapeReportText(taskConclusions[activeTask] || '未提交')}。</p><p>${feedback}</p>
+                <p>数值差来自同一理想模型的计算核对，不代表独立实测误差。</p>
+                <table><thead><tr><th>任务</th><th>模式</th><th>波型</th><th>夹角</th><th>A/A₀</th><th>I₁/I₀</th><th>I₂/I₀</th><th>I₂/I₁</th><th>数值差（百分点）</th><th>首次预测</th><th>学生解释</th></tr></thead><tbody>${rows || '<tr><td colspan="11">暂无记录</td></tr>'}</tbody></table>
+                <h2>科学结论</h2><p>偏振现象是横波的特征；光具有偏振现象，说明光具有横波性质。</p></html>`;
+            const win = window.open('', '_blank');
+            if (win) { win.document.write(report); win.document.close(); win.onload = () => win.print(); }
+        }
+
+        function downloadMeasurements() {
+            const payload = JSON.stringify({
+                title: '偏振探究实验记录', version: '1.1.0', task: activeTask,
+                measurements: measurementLog, taskPredictions, taskConclusions, taskProgress,
+                applicationScenario, applicationAnswers
+            }, null, 2);
+            const blob = new Blob([payload], {type: 'application/json;charset=utf-8'});
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a'); link.href = url; link.download = '偏振探究实验记录.json'; link.click();
+            URL.revokeObjectURL(url);
+        }
+
+
+        function startTask(task) {
+            if (!['A', 'B', 'C'].includes(task)) return;
+            activeTask = task;
+            const definition = taskDefinitions[task];
+            const panel = document.getElementById('task-panel');
+            const title = definition ? definition.title : 'C 生活应用迁移';
+            const text = definition ? definition.text : '选择应用情境，查看对应实例，并用两片偏振片的简化模型建立联系。';
+            panel.innerHTML = `<strong class="text-slate-800">当前任务：${title}</strong><p class="mt-1">${text}</p><div id="task-stage" class="mt-2 text-slate-600" aria-live="polite"></div>`;
+            if (definition) {
+                panel.innerHTML += `<div id="prediction-box" class="mt-3 border-t border-slate-200 pt-2">${Object.entries(definition.predictions).map(([key, item]) =>
+                    `<div class="mb-2"><label class="block text-sm font-semibold text-slate-600 mb-1">${item.label}</label><div class="grid grid-cols-3 gap-1.5">${item.options.map(answer =>
+                        `<button type="button" onclick="submitPrediction('${answer}','${key}')" data-prediction="${key}" data-answer="${answer}" class="prediction-option rounded border border-slate-200 bg-white">${answer}</button>`).join('')}</div></div>`).join('')}<div id="prediction-feedback" class="mt-2 text-sm text-slate-600" aria-live="polite"></div></div>
+                    <div class="mt-3"><label for="task-conclusion" class="block text-sm font-semibold text-slate-600 mb-1">完成关键记录后选择结论，可根据反馈修正</label>
+                    <select id="task-conclusion" onchange="submitTaskConclusion('${task}', this.value)" class="w-full rounded border border-slate-200 bg-white px-2 py-2"><option value="">请选择</option>${definition.conclusions.map(value => `<option value="${value}">${value}</option>`).join('')}</select>
+                    <div id="conclusion-feedback" class="mt-2 text-sm text-slate-600" aria-live="polite"></div></div>`;
+            } else {
+                panel.innerHTML += `<div class="mt-3 border-t border-slate-200 pt-2">
+                    <label for="application-select" class="block text-sm font-semibold text-slate-600 mb-1">选择生活应用情境</label>
+                    <select id="application-select" onchange="updateApplicationPrompt()" class="w-full rounded border border-slate-200 bg-white px-2 py-2">
+                        <option value="glare">偏振太阳镜防眩光</option><option value="lcd">液晶显示</option><option value="stereo">偏振式3D眼镜</option>
+                    </select><div id="application-prompt" class="mt-2 text-slate-600"></div>
+                    <button type="button" onclick="recordMeasurement('生活应用观察')" class="mt-2 w-full rounded border border-sky-200 bg-sky-50 py-2 font-semibold text-sky-700">查看实例后，记录当前类比状态</button>
+                    <div id="application-observation" class="mt-2 text-slate-600" aria-live="polite"></div>
+                    <label for="application-explanation" class="block text-sm font-semibold text-slate-600 mt-3 mb-1">写出你的解释（至少8个字）</label>
+                    <textarea id="application-explanation" maxlength="1500" oninput="saveApplicationDraft()" placeholder="结合实例说明偏振状态、器件作用和观察结果。"></textarea>
+                    <label for="application-reason" class="block text-sm font-semibold text-slate-600 mt-2 mb-1">选择主要原理依据</label>
+                    <select id="application-reason" onchange="saveApplicationDraft()" class="w-full rounded border border-slate-200 bg-white px-2 py-2"></select>
+                    <p class="mt-2 text-sm text-slate-500">系统核对原理选项；文字解释保存供教师或AI复核，不自动逐句判分。</p>
+                    <button type="button" onclick="submitApplicationExplanation()" class="mt-2 w-full rounded border border-emerald-200 bg-emerald-50 py-2 font-semibold text-emerald-700">提交情境解释</button>
+                    <div id="application-feedback" class="mt-2 text-sm text-slate-600" aria-live="polite"></div></div>`;
+            }
+            if (definition) panel.innerHTML += '<p class="mt-2 text-sm text-slate-500">计分：两道首次预测各20分，全部关键观察30分，正确结论30分。错误预测仍可完成探究。</p>';
+            const mode = definition ? definition.mode : 'light';
+            if (currentMode !== mode) switchMode(mode);
+            if (task === 'C') {
+                document.getElementById('application-select').value = applicationScenario;
+                updateApplicationPrompt();
+            }
+            updateTaskProgressUI();
+            updateExplorationAccess();
+        }
+
+        function updateApplicationPrompt() {
+            const select = document.getElementById('application-select');
+            if (!select || !applicationDefinitions[select.value]) return;
+            applicationScenario = select.value;
+            const definition = applicationDefinitions[applicationScenario];
+            const answer = applicationAnswers[applicationScenario];
+            document.getElementById('application-prompt').innerText = `${definition.prompt}\n模型边界：${definition.boundary}`;
+            document.getElementById('application-explanation').value = answer.explanation;
+            document.getElementById('application-reason').innerHTML = '<option value="">请选择</option>' +
+                definition.reasons.map(reason => `<option value="${reason.value}">${reason.text}</option>`).join('');
+            document.getElementById('application-reason').value = answer.reason;
+            selectPolarizationExample(definition.example);
+            updateTaskProgressUI();
+        }
+
+        function saveApplicationDraft() {
+            const answer = applicationAnswers[applicationScenario];
+            const explanation = document.getElementById('application-explanation').value;
+            const reason = document.getElementById('application-reason').value;
+            if (answer.explanation === explanation && answer.reason === reason) return;
+            answer.explanation = explanation;
+            answer.reason = reason;
+            answer.submitted = false;
+            answer.correct = null;
+            updateTaskProgressUI();
+        }
+
+        function submitApplicationExplanation() {
+            if (activeTask !== 'C') return;
+            saveApplicationDraft();
+            const definition = applicationDefinitions[applicationScenario];
+            const answer = applicationAnswers[applicationScenario];
+            const feedback = document.getElementById('application-feedback');
+            if (!answer.observed || answer.explanation.trim().length < 8 || !answer.reason) {
+                feedback.innerText = !answer.observed ? '请先查看对应实例，并记录一个类比状态。'
+                    : answer.explanation.trim().length < 8 ? '请写出至少8个字的解释，再提交。' : '请选择原理依据，再提交。';
+                feedback.className = 'mt-2 text-sm text-amber-700';
+                return;
+            }
+            answer.submitted = true;
+            answer.correct = answer.reason === definition.expected;
+            answer.reviews.push({time: new Date().toISOString(), explanation: answer.explanation.trim(), reason: answer.reason, correct: answer.correct});
+            taskConclusions.C = `${definition.title}：${answer.explanation.trim()}；依据：${definition.reasons.find(item => item.value === answer.reason).text}`;
+            // 关联当前情境的已记录观察，保存真正的解释，不把再次记录当作提交。
+            measurementLog.filter(item => item.task === 'C' && item.applicationScenario === applicationScenario).forEach(item => {
+                item.conclusion = taskConclusions.C;
+                item.explanationCorrect = answer.correct;
+            });
+            updateTaskProgressUI();
+        }
+
+        function taskWorkflowComplete(task) {
+            const progress = taskProgress[task];
+            return task === 'C' ? progress.measured && progress.explained
+                : progress.predicted && progress.measured && progress.explained;
+        }
+
+        function updateTaskProgressUI() {
+            const cAnswer = applicationAnswers[applicationScenario];
+            const cDefinition = applicationDefinitions[applicationScenario];
+            taskConclusions.C = cAnswer.submitted
+                ? `${cDefinition.title}：${cAnswer.explanation.trim()}；依据：${cDefinition.reasons.find(item => item.value === cAnswer.reason).text}` : '';
+            taskProgress.C.measured = cAnswer.observed;
+            taskProgress.C.explained = cAnswer.submitted;
+            taskProgress.C.correct = cAnswer.correct;
+            document.querySelectorAll('.task-entry').forEach(button => {
+                const task = button.innerText.trim().charAt(0);
+                const progress = taskProgress[task];
+                const complete = taskWorkflowComplete(task);
+                button.innerText = `${task} ${task === 'A' ? '横波类比' : task === 'B' ? '起偏检偏' : '生活应用'}${complete ? progress.correct ? ' ✓' : ' · 待修正' : ''}`;
+                button.classList.toggle('ring-2', task === activeTask);
+                button.classList.toggle('ring-sky-400', task === activeTask);
+                button.setAttribute('aria-pressed', String(task === activeTask));
+            });
+            const stage = document.getElementById('task-stage');
+            if (!stage) return;
+            const progress = taskProgress[activeTask];
+            if (activeTask === 'C') {
+                const definition = applicationDefinitions[applicationScenario];
+                stage.innerText = `当前情境：${definition.title}；观察${progress.measured ? '已记录' : '待记录'} → 解释${progress.explained ? '已提交' : '待提交'}${progress.explained ? progress.correct ? '；原理依据正确，文字待复核。' : '；原理依据需修正。' : ''}`;
+                const observation = document.getElementById('application-observation');
+                if (observation) observation.innerText = cAnswer.observed
+                    ? `已记录类比状态：θ=${cAnswer.observation.angle}°，I₂/I₀=${formatRatio(cAnswer.observation.intensityRatio)}。请结合实例解释，勿将此数值当作真实应用测量。`
+                    : '尚未记录本情境的类比状态。';
+                const feedback = document.getElementById('application-feedback');
+                if (feedback) {
+                    feedback.innerText = cAnswer.submitted
+                        ? `${cAnswer.correct ? '原理依据匹配；文字解释已保存。' : '解释已保存，但原理依据不正确，请修正后重交。'}参考解释：${definition.reference}`
+                        : '完成观察、文字解释和原理选择后提交。';
+                    feedback.className = cAnswer.submitted ? cAnswer.correct ? 'mt-2 text-sm text-emerald-700' : 'mt-2 text-sm text-amber-700' : 'mt-2 text-sm text-slate-600';
+                }
+                return;
+            }
+            const definition = taskDefinitions[activeTask];
+            const observed = definition.observations.filter(item => progress.observations[item.key]);
+            const pending = definition.observations.filter(item => !progress.observations[item.key]).map(item => item.label);
+            stage.innerText = `预测${progress.predicted ? '已锁定' : '待完成'} → 关键观察 ${observed.length}/${definition.observations.length} → 结论${progress.explained ? '已提交' : '待提交'}。${pending.length ? '待记录：' + pending.join('、') + '。' : ''}${progress.explained ? '流程' + (taskWorkflowComplete(activeTask) ? '已完成' : '待补记录') + '；学习得分 ' + taskScore(activeTask) + '/100；结论' + (progress.correct ? '正确。' : '待修正。') : ''}`;
+            updatePredictionUI();
+            const conclusion = document.getElementById('task-conclusion');
+            if (conclusion) {
+                conclusion.disabled = !progress.predicted || !progress.measured;
+                conclusion.value = taskConclusions[activeTask];
+            }
+            const feedback = document.getElementById('conclusion-feedback');
+            if (feedback) {
+                feedback.innerText = progress.explained
+                    ? `${progress.correct ? '结论与模型一致。' : '结论不正确，请根据已记录数据修正。'}参考结论：${definition.reference}`
+                    : progress.measured ? '关键观察已记录，请选择结论。' : '先完成预测及全部关键记录，再提交结论。';
+                feedback.className = progress.explained ? progress.correct ? 'mt-2 text-sm text-emerald-700' : 'mt-2 text-sm text-amber-700' : 'mt-2 text-sm text-slate-600';
+            }
+        }
+
+        function showModelInfo() {
+            alert('模型说明：机械波场景是横波方向性的类比；光波场景采用理想偏振片模型。自然光经起偏器后 I₁/I₀=50%，经检偏器后 I₂/I₀=50%×cos²θ。忽略吸收、反射和漏光，颜色仅用于区分可视化方向。');
+        }
+
+        const polarizationExamples = {
+            rotation: {
+                title: '旋光效应', image: 'assets/rotation-experiment-1.png', alt: '旋光效应实验图 1',
+                description: '线偏振光通过石英、糖溶液等旋光物质后，偏振方向会发生旋转。旋转角与材料性质、传播长度和浓度有关。',
+                principle: '关键关系：偏振方向旋转后，可通过检偏器角度变化测出旋转角。',
+                connection: '与本实验的联系：先用起偏器获得线偏振光，再用检偏器寻找透射最强或最弱的位置。'
+            },
+            '3d': {
+                title: '偏振 3D 电影', image: 'assets/polarization-3d.svg', alt: '偏振3D电影示意图',
+                description: '影院将左眼和右眼画面分别编码为不同方向的偏振光。3D 眼镜的左右镜片只允许对应方向的光进入，从而让两只眼睛接收到不同画面。',
+                principle: '关键关系：两路图像使用不同偏振方向，眼镜镜片完成方向选择；理想正交时可相互隔离。',
+                connection: '与本实验的联系：3D 眼镜就是两片方向不同的偏振片，透过率同样受透振轴夹角控制。'
+            },
+            camera: {
+                title: '偏振镜头', image: 'assets/polarization-camera.svg', alt: '偏振镜头示意图',
+                description: '相机或太阳镜前的偏振滤镜可以削弱水面、玻璃和漆面的镜面反射眩光，使被遮住的纹理和颜色更清楚。旋转滤镜即可调节效果。',
+                principle: '关键关系：反射眩光往往具有较强偏振性，滤镜选择性吸收与其方向接近的振动分量。',
+                connection: '与本实验的联系：旋转检偏器就是在改变透振轴方向，观察光强如何随角度变化。'
+            },
+            lcd: {
+                title: '液晶屏幕', image: 'assets/polarization-lcd.svg', alt: '液晶屏幕示意图',
+                description: '液晶显示器在两片偏振片之间放置液晶层。电压改变液晶分子的排列，进而改变光的偏振方向和透过强度，每个像素都能独立调节亮暗。',
+                principle: '关键关系：液晶层相当于可控的偏振方向调节器，偏振片组合把方向变化转换成亮度变化。',
+                connection: '与本实验的联系：屏幕亮度变化仍可用偏振片透过率和透振轴夹角来理解。'
+            }
+        };
+
+        function selectPolarizationExample(key) {
+            const example = polarizationExamples[key];
+            if (!example) return;
+            const image = document.getElementById('example-image');
+            const title = document.getElementById('example-title');
+            const description = document.getElementById('example-description');
+            const principle = document.getElementById('example-principle');
+            const connection = document.getElementById('example-connection');
+            if (image) { image.src = example.image; image.alt = example.alt; }
+            if (image) image.hidden = key === 'rotation';
+            const gallery = document.getElementById('rotation-gallery');
+            if (gallery) gallery.classList.toggle('visible', key === 'rotation');
+            if (title) title.innerText = example.title;
+            if (description) description.innerText = example.description;
+            if (principle) principle.innerText = example.principle;
+            if (connection) connection.innerText = example.connection;
+            document.querySelectorAll('.example-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.example === key));
+        }
+
+        function toggleAutoRotate() {
+            autoRotateActive = canExploreTask() && document.getElementById('check-autorotate').checked;
+        }
+
+        function togglePlayPause() {
+            isPlaying = !isPlaying;
+            const btnText = document.getElementById('btn-play-text');
+            const svgPause = document.getElementById('svg-pause');
+            const svgPlay = document.getElementById('svg-play');
+            const animState = document.getElementById('anim-state');
+
+            if (isPlaying) {
+                btnText.innerText = "暂停仿真";
+                svgPause.classList.remove('hidden');
+                svgPlay.classList.add('hidden');
+                animState.innerText = "物理引擎正在实时渲染";
+                animState.parentElement.children[0].classList.add('animate-ping');
+            } else {
+                btnText.innerText = "继续播放";
+                svgPause.classList.add('hidden');
+                svgPlay.classList.remove('hidden');
+                animState.innerText = "仿真已冻结当前帧";
+                animState.parentElement.children[0].classList.remove('animate-ping');
+            }
+        }
+
+        function resetCamera() {
+            camera.position.set(13, 8, 11);
+            controls.target.set(0, 0, 0);
+            controls.update();
+        }
+
+        function onWindowResize() {
+            if (!camera || !renderer || !container.clientWidth || !container.clientHeight) return;
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+            const panel = document.getElementById('metrics-panel');
+            if (panel && currentMode === 'mechanical') {
+                // 缩小视口后，保持已拖动的反馈卡片位于可见范围内，留出底部工具条。
+                const maxTop = Math.max(16, height - panel.offsetHeight - 56);
+                if (panel.offsetTop > maxTop) panel.style.top = `${maxTop}px`;
+                if (panel.style.left) {
+                    const maxLeft = Math.max(16, width - panel.offsetWidth - 16);
+                    panel.style.left = `${Math.max(16, Math.min(maxLeft, panel.offsetLeft))}px`;
+                }
+            }
+            drawTheoryCurve();
+        }
+
+        // === 9. 仿真物理引擎主渲染循环 ===
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (autoRotateActive && isPlaying) {
+                const slider = currentMode === 'mechanical' ? 'slider-slit2' : 'slider-pol2';
+                let curVal = parseInt(document.getElementById(slider).value);
+                curVal = (curVal + 1) % 181;
+                if (curVal === 180) curVal = 0;
+                document.getElementById(slider).value = curVal;
+                updateParams();
+            }
+
+            updatePhysics(true);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // ===================== 10. AI 智能体多模态交互与分析模块 =====================
+        const apiEndpoint = '/api/tutor'; // 同站点服务端代理读取环境变量，适用于本机与公网部署
+        const tutorHistory = [];
+        let tutorPending = false;
+
+        // 捕获回车键
+        function handleInputKey(event) {
+            if (event.key === 'Enter') {
+                sendUserQuestion();
+            }
+        }
+
+        // 点选快捷问题的触发函数
+        function quickAsk(questionText) {
+            if (tutorPending) return;
+            document.getElementById('ai-chat-input').value = questionText;
+            sendUserQuestion();
+        }
+
+        // 按钮及宏一键研判
+        function quickAnalyzeCurrentScene() {
+            quickAsk("请帮我一键研判并解析当前的3D实验画面和对应知识点。");
+        }
+
+        // 在聊天历史区域追加新消息 bubble
+        function appendChatMessage(senderName, textContent, isAI = false) {
+            const chatMessagesContainer = document.getElementById('ai-chat-messages');
+            
+            const messageWrapper = document.createElement('div');
+            messageWrapper.className = `flex items-start gap-2.5 ${isAI ? '' : 'flex-row-reverse'}`;
+
+            // 头像
+            const avatar = document.createElement('div');
+            avatar.className = `w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-xs font-bold border ${
+                isAI ? 'bg-sky-100 border-sky-200 text-sky-700' : 'bg-slate-200 border-slate-300 text-slate-700'
+            }`;
+            avatar.innerText = isAI ? '🤖' : '我';
+
+            // 文本内容盒
+            const bubble = document.createElement('div');
+            bubble.className = `p-2.5 rounded-xl max-w-[85%] leading-relaxed ${
+                isAI ? 'bg-slate-100 text-slate-700 shadow-2xs' : 'bg-sky-500 text-white shadow-2xs'
+            }`;
+
+            // 保存唯一的 ID，用于打字机逐渐输入
+            const textId = 'msg-' + Math.random().toString(36).substr(2, 9);
+            bubble.id = textId;
+
+            if (!isAI) {
+                bubble.innerText = textContent;
+            } else {
+                // 如果是 AI 消息，后面用打字机进行格式化和渐进式填入
+                bubble.innerHTML = "...";
+            }
+
+            messageWrapper.appendChild(avatar);
+            messageWrapper.appendChild(bubble);
+            chatMessagesContainer.appendChild(messageWrapper);
+            
+            // 滚动到最底
+            chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+
+            return textId;
+        }
+
+        // 发送用户提问主逻辑
+        async function sendUserQuestion() {
+            if (tutorPending) return;
+            const inputEl = document.getElementById('ai-chat-input');
+            const userQuestionText = inputEl.value.trim();
+            if (!userQuestionText) return;
+            tutorPending = true;
+            document.getElementById('btn-ai-send').disabled = true;
+            document.getElementById('btn-ai-analyze').disabled = true;
+            inputEl.value = "";
+            appendChatMessage("用户", userQuestionText, false);
+            const aiTextId = appendChatMessage("AI助教", "正在研读画面中...", true);
+            const aiBubble = document.getElementById(aiTextId);
+            aiBubble.innerHTML = `
+                <div class="flex items-center gap-1.5 py-1">
+                    <span class="w-2 h-2 rounded-full bg-sky-500 animate-ping"></span>
+                    <span class="text-slate-400 font-medium">正在分析当前画面与问题...</span>
+                </div>
+            `;
+            const physicalState = getPhysicalState();
+            const relativeAngleDeg = physicalState.theta;
+            const amplitudeRatio = physicalState.amplitudeRatio;
+            const detectionPct = currentMode === 'light'
+                ? Number((physicalState.i2 * 100).toFixed(2))
+                : Math.round(amplitudeRatio * 100);
+            try {
+                const useOnlineTutor = ['http:', 'https:'].includes(window.location.protocol);
+                if (!useOnlineTutor && !window.AI_TUTOR_ENABLED) {
+                    typeWriteResponse(aiTextId, generateLocalRuleBasedResponse(currentMode, mechWaveType, relativeAngleDeg, detectionPct, userQuestionText), true);
+                    return;
+                }
+                const state = {
+                    mode: currentMode, waveType: mechWaveType, task: activeTask,
+                    polarizerDeg: Math.round(angle1 * 180 / Math.PI),
+                    analyzerDeg: Math.round(angle2 * 180 / Math.PI),
+                    relativeAngleDeg,
+                    i1Ratio: physicalState.i1,
+                    i2Ratio: physicalState.i2,
+                    i2OverI1Ratio: physicalState.i2OverI1,
+                    mechanicalAmplitudeRatio: currentMode === 'mechanical' ? amplitudeRatio : null
+                };
+                renderer.render(scene, camera);
+                const dataUrl = renderer.domElement.toDataURL('image/png');
+                const result = await callTutorProxy(userQuestionText, state, dataUrl);
+                typeWriteResponse(aiTextId, formatTutorAnswer(result), false);
+                tutorHistory.push({role:'user',content:userQuestionText},{role:'assistant',content:result.answer});
+                if (tutorHistory.length > 8) tutorHistory.splice(0,tutorHistory.length - 8);
+            } catch (error) {
+                const status = document.getElementById('ai-connection-status');
+                if (status) { status.innerText = '离线知识提示'; status.title = error?.message || '在线代理请求失败，已切换本地知识提示'; status.className = 'text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded font-mono'; }
+                const backupText = generateLocalRuleBasedResponse(currentMode, mechWaveType, relativeAngleDeg, detectionPct, userQuestionText);
+                typeWriteResponse(aiTextId, '**在线连接失败，以下为本地参考**\n\n' + classifyLocalTutorAnswer(backupText, userQuestionText), true);
+            } finally {
+                tutorPending = false;
+                document.getElementById('btn-ai-send').disabled = false;
+                document.getElementById('btn-ai-analyze').disabled = false;
+            }
+        }
+
+        function formatTutorAnswer(result) {
+            const labels = {related: '实验相关', partial: '相关延伸', unrelated: '自由提问'};
+            return `**${labels[result.relevance] || labels.partial}**\n\n${result.answer}`;
+        }
+
+        function classifyLocalTutorAnswer(answer, question) {
+            const q = question.toLowerCase();
+            const relatedTerms = ['偏振', '光强', '透振', '检偏', '起偏', '横波', '纵波', '角度', '消光', '实验', '振幅', '任务'];
+            const partialTerms = ['液晶', '太阳镜', '3d', '反射', '电磁波', '马吕斯'];
+            const related = relatedTerms.some(term => q.includes(term));
+            const partial = partialTerms.some(term => q.includes(term));
+            const relevance = related ? 'related' : partial ? 'partial' : 'unrelated';
+            if (relevance === 'unrelated') return '**问题判断：与本实验无关**\n\n这个问题超出了当前偏振实验的答疑范围。我可以继续帮你分析透振轴夹角、光强变化或横波类比。';
+            return `**问题判断：${relevance === 'related' ? '与本实验直接相关' : '部分相关'}**\n\n${answer}`;
+        }
+
+        async function callTutorProxy(userQuestion, state, imageDataUrl) {
+            const payload = {
+                question: userQuestion,
+                image: imageDataUrl,
+                state,
+                history: tutorHistory
+            };
+            const response = await fetch(apiEndpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.detail || result.error || `AI代理请求失败：${response.status}`);
+            if (!result.answer || !['related','partial','unrelated'].includes(result.relevance)) throw new Error('AI代理未返回相关性判定和回答');
+            const answerText = String(result.answer).trim();
+            const looksLikeReasoning = /^(我们需要|需要回答|需要解释|分析如下|思考|推理|用户问|要求：|当前状态：)/.test(answerText) || answerText.includes('不要展示思考过程');
+            if (looksLikeReasoning) throw new Error('代理返回了思考草稿而非最终答案');
+            const status = document.getElementById('ai-connection-status');
+            if (status) {
+                const displayModel = result.modelName || (result.model === 'deepseek-flash' ? 'DeepSeek-V4.1-Flash' : result.model);
+                status.innerText = result.imageStatus === 'sent' ? `${displayModel} · 图像已提交` : `${displayModel} · 仅状态文本`;
+                status.title = result.imageStatus === 'sent' ? `本轮截图已提交给 ${displayModel}` : `本轮回答未使用截图，仅依据文字状态；模型：${displayModel}`;
+                status.className = result.imageStatus === 'sent' ? 'text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-mono' : 'text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded font-mono';
+            }
+            return result;
+        }
+
+        // 本地多分支意图理解离线回复引擎（根据用户自定义提问内容进行拟真物理应答）
+        function generateLocalRuleBasedResponse(mode, waveType, angleDiff, pct, userMsg) {
+            const msg = userMsg.toLowerCase();
+            let response = "";
+
+            // 分支 1：询问横波与偏振特征的关系
+            if (msg.includes("横波") || msg.includes("横波特有") || msg.includes("为什么是横波")) {
+                response = `### 本地物理状态解释
+
+👋 **问题研判**：关于“为什么偏振说明光是横波？”
+**助教释疑**：横波的振动方向与传播轴垂直。当它穿过狭缝时，只有平行于狭缝的振动分量才能通过，这就叫**偏振**。如果光是纵波（像声波那样前后振动），不管你怎么旋转偏振镜片，它都不会受到狭缝方向的阻拦。
+
+💡 **结合当前实验**：
+当前仿真处于**${mode === 'mechanical' ? '机械横波类比' : '光的自然光偏振'}**阶段。当前夹角为 **${angleDiff}°**，${mode === 'light' ? '相对入射光强' : '相对振幅'}为 **${pct}%**。偏振现象是横波的特征；光具有偏振现象，说明光具有横波性质。`;
+            } 
+            // 分支 2：询问纵波特征
+            else if (msg.includes("纵波") || msg.includes("弹簧波") || msg.includes("为什么纵波")) {
+                response = `### 本地物理状态解释
+
+👋 **问题研判**：关于“纵波为什么不会被减弱/没有偏振现象？”
+**助教释疑**：纵波（如声波、弹簧疏密波）的振动方向和波的传播方向在**同一直线上**。因此，当纵波穿过狭缝屏障时，不管我们如何把第二道狭缝旋转至水平、垂直、还是倾斜，它在轴向上的压缩和舒张都不会被任何取向的格栅切断。
+
+💡 **结合当前实验**：
+在当前的机械类比控制面板中，点击“弹簧纵波”，不管把允许方向2调到什么角度，类比输出都保持为 **100%**。这构成了对照组：纵波没有横向振动方向，不能呈现与横波相同的方向选择性。这里是帮助理解的机械类比，不是光学器件的直接复制。`;
+            } 
+            // 分支 3：询问消光或垂直状态
+            else if (msg.includes("消光") || msg.includes("垂直") || msg.includes("全黑") || msg.includes("阻挡")) {
+                response = `### 本地物理状态解释
+
+👋 **问题研判**：关于“起偏器和检偏器垂直时为什么会全黑消光？”
+**助教释疑**：自然光在所有横向角度都在均匀振动。通过竖直排列的第一片偏振镜（起偏器）后，光被限制在只沿竖直平面振动（变成了偏振光）。而当第二片镜片（检偏器）旋转到水平方向时，它的透振方向与竖直偏振光正好呈 **90°** 垂直，导致振动被完全阻拦。
+
+💡 **结合当前实验**：
+当您将两透振轴夹角调至 **90°** （当前实际夹角为 **${angleDiff}°**，相对入射光强为 **${pct}%**），理想模型中的光屏光斑完全消失。这叫做**理想完全消光**。偏振现象是横波的特征；光具有偏振现象，说明光具有横波性质。`;
+            }
+            // 分支 4：询问应用或现实生活
+            else if (msg.includes("应用") || msg.includes("生活") || msg.includes("偏振片有什么用") || msg.includes("用处")) {
+                response = `### 本地物理状态解释
+
+👋 **问题研判**：关于“偏振在生活中的用处有哪些？”
+**助教释疑**：高中物理涉及的偏振应用非常广泛！
+1. **防眩光太阳镜**：钓鱼或驾驶时，水面和路面的反射光具有强烈的偏振性，佩戴防眩偏振眼镜可以完美过滤掉这部分刺眼的反射光。
+2. **3D 电影眼镜**：电影院的左右投影机分别播放两种不同振动平面的偏振画面，观众佩戴的 3D 眼镜左眼和右眼正是对应方向的偏振片，从而在左右眼分别成像，合成立体感。`;
+            }
+            // 兜底分支：根据当前实况做智能通用回复
+            else {
+                response = `### 本地物理状态解释
+
+👋 **问题研判**：关于您提问的：“${userMsg}”
+**助教释疑**：这是一个非常深刻的问题！在高中物理电磁波偏振章节中，我们重在定性理解横波具有振动平面指向的专有特性。
+
+💡 **结合当前实验**：
+当前系统工作在**${mode === 'mechanical' ? '机械波类比' : '光波偏振'}**场景。当前透振轴或允许方向夹角为 **${angleDiff}°**，${mode === 'light' ? '相对入射光强' : '机械类比相对振幅'}为 **${pct}%**。通过在3D视图中观察方向和输出变化，可以理解偏振现象与横波性质之间的关系。`;
+            }
+
+            return response;
+        }
+
+        // 以平滑打字机动画形式渲染回答，支持 MarkDown 部分高亮转义
+        function typeWriteResponse(elementId, markdownText, isBackup = false) {
+            const bubble = document.getElementById(elementId);
+            if (!bubble) return;
+
+            // 格式化文本
+            let formattedHtml = markdownText
+                .replace(/\n/g, '<br>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/### (.*?)(<br>|$)/g, '<h4 class="text-[13px] font-bold text-slate-800 border-b border-slate-200 pb-1 mt-1 mb-1.5">$1</h4>')
+                .replace(/👋 (.*?)(<br>|$)/g, '<p class="font-semibold text-sky-700 flex items-center gap-1">👋 $1</p>')
+                .replace(/💡 (.*?)(<br>|$)/g, '<p class="font-semibold text-indigo-700 flex items-center gap-1 mt-1.5">💡 $1</p>')
+                .replace(/([0-9]+\.) (.*?)(<br>|$)/g, '<div class="pl-2 mt-1"><span class="font-bold text-slate-700">$1</span> $2</div>');
+
+            if (isBackup) {
+                formattedHtml += `<div class="mt-2 pt-1 border-t border-slate-150 text-[9px] text-slate-400 italic">注：当前回答来自离线知识提示，核心仿真功能不受影响。</div>`;
+            }
+
+            let i = 0;
+            const step = 8; // 每次吐字
+            bubble.innerHTML = "";
+
+            function typeWriter() {
+                if (i < formattedHtml.length) {
+                    bubble.innerHTML = formattedHtml.substring(0, i + step);
+                    i += step;
+                    
+                    // 保持滚动到底部
+                    const chatMessagesContainer = document.getElementById('ai-chat-messages');
+                    chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+
+                    setTimeout(typeWriter, 12);
+                } else {
+                    bubble.innerHTML = formattedHtml;
+                    const chatMessagesContainer = document.getElementById('ai-chat-messages');
+                    chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+                }
+            }
+            typeWriter();
+        }
+
+        // 脚本载入就绪启动
+        window.onload = function() {
+            initThree();
+            currentMode = 'mechanical';
+            switchMode('light');
+            startTask('B');
+            updateParams();
+            appReady = true;
+            animate();
+        };
+
+    </script>
+</body>
+</html>
